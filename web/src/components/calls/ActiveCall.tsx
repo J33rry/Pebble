@@ -12,6 +12,7 @@ import "@livekit/components-styles";
 import { Track } from "livekit-client";
 import {
   PhoneOff,
+  LogOut,
   Mic,
   MicOff,
   Video,
@@ -29,18 +30,22 @@ interface ActiveCallProps {
   token: string;
   serverUrl: string;
   callType: "audio" | "video";
+  isGroup: boolean;
+  canEndForEveryone: boolean;
 }
 
-export function ActiveCall({ token, serverUrl, callType }: ActiveCallProps) {
-  const { endCall, setConnected } = useCallStore();
+export function ActiveCall({ token, serverUrl, callType, isGroup, canEndForEveryone }: ActiveCallProps) {
+  const { endCall, leaveCall, setConnected } = useCallStore();
 
   const handleConnected = useCallback(() => {
     setConnected();
   }, [setConnected]);
 
+  // In a group, losing your connection must not end the call for the others.
   const handleDisconnected = useCallback(() => {
-    endCall();
-  }, [endCall]);
+    if (isGroup) leaveCall();
+    else endCall();
+  }, [isGroup, leaveCall, endCall]);
 
   return (
     <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-3xl flex flex-col select-none animate-in fade-in duration-300">
@@ -55,14 +60,22 @@ export function ActiveCall({ token, serverUrl, callType }: ActiveCallProps) {
         className="flex flex-col h-full"
       >
         <RoomAudioRenderer />
-        <CallContent callType={callType} />
+        <CallContent callType={callType} isGroup={isGroup} canEndForEveryone={canEndForEveryone} />
       </LiveKitRoom>
     </div>
   );
 }
 
-function CallContent({ callType }: { callType: "audio" | "video" }) {
-  const { endCall } = useCallStore();
+function CallContent({
+  callType,
+  isGroup,
+  canEndForEveryone,
+}: {
+  callType: "audio" | "video";
+  isGroup: boolean;
+  canEndForEveryone: boolean;
+}) {
+  const { endCall, leaveCall } = useCallStore();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(callType === "video");
   const [elapsed, setElapsed] = useState(0);
@@ -108,10 +121,24 @@ function CallContent({ callType }: { callType: "audio" | "video" }) {
     }
   }, [localParticipant, isVideoOn]);
 
-  const handleEndCall = useCallback(async () => {
-    room.disconnect();
-    await endCall();
-  }, [room, endCall]);
+  // The store action runs first so it clears the active call before the
+  // disconnect fires handleDisconnected.
+  const exitCall = useCallback(
+    async (exit: () => Promise<void>) => {
+      const finished = exit();
+      room.disconnect();
+      await finished;
+    },
+    [room]
+  );
+
+  const showLeaveButton = isGroup && canEndForEveryone;
+  const mainButtonLeaves = isGroup && !canEndForEveryone;
+  const mainButtonLabel = mainButtonLeaves
+    ? "Leave call"
+    : isGroup
+      ? "End call for everyone"
+      : "End call";
 
   const remoteVideoTracks = remoteTracks.filter(
     (t) =>
@@ -225,7 +252,7 @@ function CallContent({ callType }: { callType: "audio" | "video" }) {
 
       {/* Floating Control Bar */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30">
-        <div className="glass-pill px-6 py-4 flex items-center gap-4 md:gap-6 shadow-2xl border border-border">
+        <div className="glass-pill px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 md:gap-6 shadow-2xl border border-border">
           <button
             onClick={toggleMute}
             className={clsx(
@@ -252,16 +279,31 @@ function CallContent({ callType }: { callType: "audio" | "video" }) {
             {!isVideoOn ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
           </button>
 
+          {showLeaveButton && (
+            <button
+              onClick={() => exitCall(leaveCall)}
+              className="h-12 md:h-14 px-4 md:px-5 rounded-full flex items-center justify-center gap-2 bg-surface-3/50 text-fg hover:bg-surface-3 text-sm md:text-[15px] font-medium whitespace-nowrap transition-all duration-300"
+              title="Leave call. It continues for everyone else."
+            >
+              <LogOut className="w-5 h-5" />
+              Leave
+            </button>
+          )}
+
           <button
-            onClick={handleEndCall}
+            onClick={() => exitCall(mainButtonLeaves ? leaveCall : endCall)}
             className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-danger hover:bg-danger-fg hover:text-danger text-white flex items-center justify-center transition-all duration-300 shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105 mx-2"
-            title="End Call"
+            title={mainButtonLabel}
+            aria-label={mainButtonLabel}
           >
             <PhoneOff className="w-7 h-7 md:w-8 md:h-8" />
           </button>
 
           <button
-            className="w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center bg-surface-3/50 text-fg hover:bg-surface-3 transition-all duration-300"
+            className={clsx(
+              "w-12 h-12 md:w-14 md:h-14 rounded-full items-center justify-center bg-surface-3/50 text-fg hover:bg-surface-3 transition-all duration-300",
+              showLeaveButton ? "hidden xl:flex" : "flex"
+            )}
             title="More Options"
           >
             <MoreVertical className="w-5 h-5 md:w-6 md:h-6" />

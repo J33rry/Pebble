@@ -54,6 +54,7 @@ export interface SendMessagePayload {
   content?: string;
   mediaId?: string;
   replyToMessageId?: string;
+  clientMessageId?: string;
 }
 
 export const messagesApi = {

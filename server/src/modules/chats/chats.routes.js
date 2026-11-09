@@ -5,13 +5,16 @@ import {
     requireChatParticipant,
     requireChatAdmin,
 } from "../../middleware/chatAccess.js";
+import { rateLimiter, byUser } from "../../middleware/rateLimiter.js";
 
 const router = Router();
 
 router.use(requireAuth());
 
+const createLimiter = rateLimiter({ name: "chat-create", max: 30, keyFn: byUser });
+
 router.get("/", ctrl.listChats);
-router.post("/", ctrl.createChat);
+router.post("/", createLimiter, ctrl.createChat);
 
 // Declared before /:chatId routes that could otherwise shadow them.
 router.patch(

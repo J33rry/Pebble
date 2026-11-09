@@ -1,7 +1,7 @@
 import { asyncHandler } from "../../lib/asyncHandler.js";
 import * as mediaService from "./media.service.js";
 
-import { generateUploadSignature } from "../../lib/cloudinary.js";
+import { generateUploadSignature, isOwnMediaUrl } from "../../lib/cloudinary.js";
 import { z } from "zod";
 
 export const getUploadSignature = asyncHandler(async (req, res) => {
@@ -10,10 +10,10 @@ export const getUploadSignature = asyncHandler(async (req, res) => {
 });
 
 const saveMetadataSchema = z.object({
-    storageId: z.string(),
-    fileName: z.string(),
-    mimeType: z.string(),
-    fileSize: z.number(),
+    storageId: z.string().max(2048).refine(isOwnMediaUrl, "Unrecognized media URL"),
+    fileName: z.string().min(1).max(255),
+    mimeType: z.string().max(100),
+    fileSize: z.number().int().positive(),
 });
 
 export const saveMediaMetadata = asyncHandler(async (req, res) => {

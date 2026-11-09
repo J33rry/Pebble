@@ -32,4 +32,25 @@ export function generateUploadSignature() {
     };
 }
 
+/**
+ * True only for an asset delivered from this account's upload folder. Media
+ * URLs are rendered for and redirected to other users, so nothing else may be
+ * stored or served as one.
+ */
+export function isOwnMediaUrl(value) {
+    let url;
+    try {
+        url = new URL(value);
+    } catch {
+        return false;
+    }
+
+    return (
+        url.protocol === "https:" &&
+        url.hostname === "res.cloudinary.com" &&
+        url.pathname.startsWith(`/${env.CLOUDINARY_CLOUD_NAME}/`) &&
+        /\/(image|video|raw)\/upload\/(v\d+\/)?chat_media\//.test(url.pathname)
+    );
+}
+
 export default cloudinary;

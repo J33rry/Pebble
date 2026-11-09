@@ -1,59 +1,66 @@
 import { asyncHandler } from "../../lib/asyncHandler.js";
+import { disconnectUserSockets } from "../../ws/connectionRegistry.js";
 import * as authService from "./auth.service.js";
 import * as v from "./auth.validation.js";
 
-export const register = asyncHandler(async (req, res, next) => {
-    const body = v.registerSchema.parse(req.body);
-    const user = await authService.register(body);
+const regenerateSession = (req) =>
+    new Promise((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
 
+const saveSession = (req) =>
+    new Promise((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve())),
+    );
+
+// Regenerate to prevent session fixation, then explicitly save so the session
+// is written to the store before the response and cookie are sent; otherwise a
+// later reload could see no userId.
+async function startSession(req, { user, sessionVersion }) {
+    await regenerateSession(req);
     req.session.userId = user.id;
+    req.session.sessionVersion = sessionVersion;
+    await saveSession(req);
+}
 
-    // Persist the session to the store before responding, so the session
-    // cookie the client receives is backed by a saved session (userId present).
-    req.session.save((err) => {
-        if (err) return next(err);
-        res.status(201).json({ user });
-    });
+export const register = asyncHandler(async (req, res) => {
+    const body = v.registerSchema.parse(req.body);
+    const result = await authService.register(body);
+    await startSession(req, result);
+    res.status(201).json({ user: result.user });
 });
 
 // ── Login flow ──
 
-export const loginPassword = asyncHandler(async (req, res, next) => {
+export const loginPassword = asyncHandler(async (req, res) => {
     const body = v.loginPasswordSchema.parse(req.body);
-    const user = await authService.loginWithPassword(body);
-
-    // Regenerate to prevent session fixation, then explicitly save so the
-    // regenerated session (with userId) is written to the store before the
-    // response/cookie are sent — otherwise a later reload sees no userId.
-    req.session.regenerate((err) => {
-        if (err) return next(err);
-        req.session.userId = user.id;
-        req.session.save((saveErr) => {
-            if (saveErr) return next(saveErr);
-            res.json({ user });
-        });
-    });
+    const result = await authService.loginWithPassword(body);
+    await startSession(req, result);
+    res.json({ user: result.user });
 });
 
-export const loginGoogle = asyncHandler(async (req, res, next) => {
+export const loginGoogle = asyncHandler(async (req, res) => {
     const { idToken } = v.loginGoogleSchema.parse(req.body);
-    const user = await authService.loginWithGoogle(idToken);
-
-    req.session.regenerate((err) => {
-        if (err) return next(err);
-        req.session.userId = user.id;
-        req.session.save((saveErr) => {
-            if (saveErr) return next(saveErr);
-            res.json({ user });
-        });
-    });
+    const result = await authService.loginWithGoogle(idToken);
+    await startSession(req, result);
+    res.json({ user: result.user });
 });
 
 // ── Password change ──
 
 export const changePassword = asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = v.passwordChangeSchema.parse(req.body);
-    await authService.changePassword(req.user.id, currentPassword, newPassword);
+    const sessionVersion = await authService.changePassword(
+        req.user.id,
+        currentPassword,
+        newPassword,
+    );
+
+    // Every other device is signed out; this one stays signed in.
+    req.session.sessionVersion = sessionVersion;
+    await saveSession(req);
+    disconnectUserSockets(req.user.id, { exceptSessionId: req.sessionID });
+
     res.json({ message: "Password changed" });
 });
 
@@ -74,9 +81,9 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
 // ── Logout ──
 
-export const logout = asyncHandler(async (req, res) => {
+export const logout = asyncHandler(async (req, res, next) => {
     req.session.destroy((err) => {
-        if (err) throw err;
+        if (err) return next(err);
         res.clearCookie("connect.sid");
         res.json({ message: "Logged out" });
     });

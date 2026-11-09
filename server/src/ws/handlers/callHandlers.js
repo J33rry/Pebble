@@ -1,57 +1,28 @@
-import { broadcastToChat, broadcastToUser } from "../connectionRegistry.js";
+import { z } from "zod";
+import { broadcastToUser } from "../connectionRegistry.js";
 import { findCallById } from "../../modules/calls/calls.repository.js";
+import { findChatById, findParticipant } from "../../modules/chats/chats.repository.js";
 
+const callEventSchema = z.object({ callId: z.string().uuid() });
+
+// The only call event a client emits: declining an incoming call. Starting,
+// joining, leaving and ending all go through the REST routes.
 export async function handleCallEvent(socket, type, payload) {
     const userId = socket.data.userId;
+    const parsed = callEventSchema.safeParse(payload);
+    if (type !== "call:rejected" || !parsed.success) return;
 
-    switch (type) {
-        case "call:incoming": {
-            // Handled via REST initiation; this is for signaling if needed
-            break;
-        }
+    const call = await findCallById(parsed.data.callId);
+    if (!call || call.endedAt) return;
+    if (!(await findParticipant(call.chatId, userId))) return;
 
-        case "call:participant-joined": {
-            const call = await findCallById(payload.callId);
-            if (!call) return;
-            broadcastToChat(
-                call.chatId,
-                { type: "call:participant-joined", payload: { callId: call.id, userId } },
-                userId,
-            );
-            break;
-        }
+    // The caller's client ends the call when told it was rejected. That's right
+    // for a DM, but in a group one person declining says nothing about the rest.
+    const chat = await findChatById(call.chatId);
+    if (chat.type !== "dm") return;
 
-        case "call:participant-left": {
-            const call = await findCallById(payload.callId);
-            if (!call) return;
-            broadcastToChat(
-                call.chatId,
-                { type: "call:participant-left", payload: { callId: call.id, userId } },
-                userId,
-            );
-            break;
-        }
-
-        case "call:ended": {
-            const call = await findCallById(payload.callId);
-            if (!call) return;
-            broadcastToChat(
-                call.chatId,
-                { type: "call:ended", payload: { callId: call.id } },
-                null,
-            );
-            break;
-        }
-
-        case "call:rejected": {
-            // When a user declines an incoming call, notify the caller
-            const call = await findCallById(payload.callId);
-            if (!call) return;
-            broadcastToUser(call.initiatorId, {
-                type: "call:rejected",
-                payload: { callId: call.id, userId },
-            });
-            break;
-        }
-    }
+    broadcastToUser(call.initiatorId, {
+        type: "call:rejected",
+        payload: { callId: call.id, userId },
+    });
 }

@@ -15,7 +15,12 @@ export function requireAuth() {
             .where(eq(users.id, req.session.userId))
             .limit(1);
 
-        if (!user || user.deletedAt) {
+        // Sessions from before the last password change or reset no longer count.
+        if (
+            !user ||
+            user.deletedAt ||
+            (req.session.sessionVersion ?? 0) !== user.sessionVersion
+        ) {
             req.session.destroy(() => {});
             throw new AppError(401, "User not found", "UNAUTHENTICATED");
         }

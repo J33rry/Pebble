@@ -41,23 +41,13 @@ export async function updateContact(userId, contactId, status) {
         throw new AppError(403, "Only the recipient can respond to a contact request", "FORBIDDEN");
     }
 
-    const updated = await repo.updateContactStatus(contactId, status);
-
-    // If accepted, create the reverse relationship
-    if (status === "accepted") {
-        const reverse = await repo.findContactPair(contact.contactId, contact.userId);
-        if (!reverse) {
-            await repo.createContact({
-                userId: contact.contactId,
-                contactId: contact.userId,
-                status: "accepted",
-            });
-        } else {
-            await repo.updateContactStatus(reverse.id, "accepted");
-        }
+    if (contact.status !== "pending") {
+        throw new AppError(409, "This request has already been answered", "ALREADY_ANSWERED");
     }
 
-    return updated;
+    return status === "accepted"
+        ? repo.acceptContact(contact)
+        : repo.updateContactStatus(contactId, status);
 }
 
 export async function removeContact(userId, contactId) {
@@ -68,9 +58,5 @@ export async function removeContact(userId, contactId) {
         throw new AppError(403, "Forbidden", "FORBIDDEN");
     }
 
-    await repo.deleteContact(contactId);
-
-    // Also remove the reverse relationship
-    const reverse = await repo.findContactPair(contact.contactId, contact.userId);
-    if (reverse) await repo.deleteContact(reverse.id);
+    await repo.deleteContactPair(contact.userId, contact.contactId);
 }

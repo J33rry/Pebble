@@ -1,7 +1,6 @@
 export * from "./users.js";
 export * from "./contacts.js";
 export * from "./chats.js";
-export * from "./blockedUsers.js";
 export * from "./chatParticipants.js";
 export * from "./chatFolders.js";
 export * from "./chatFolderItems.js";

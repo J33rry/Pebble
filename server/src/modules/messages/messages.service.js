@@ -1,9 +1,7 @@
 import { AppError } from "../../lib/AppError.js";
 import * as repo from "./messages.repository.js";
-import { isBlocked } from "../blocked/blocked.repository.js";
+import { findMediaById } from "../media/media.repository.js";
 import {
-    findChatById,
-    getChatParticipantUserIds,
     findChatParticipants,
     advanceLastReadAt,
 } from "../chats/chats.repository.js";
@@ -46,28 +44,42 @@ async function syncMentions(messageId, chatId, content) {
     return userIds;
 }
 
-export async function sendMessage(chatId, senderId, data) {
-    const chat = await findChatById(chatId);
+// The route only proves the user belongs to :chatId, so every operation on a
+// message must also confirm the message is in that chat.
+async function getMessageInChat(chatId, messageId) {
+    const message = await repo.findMessageById(messageId);
+    if (!message || message.chatId !== chatId) {
+        throw new AppError(404, "Message not found", "NOT_FOUND");
+    }
+    return message;
+}
 
-    if (chat.type === "dm") {
-        const participantIds = await getChatParticipantUserIds(chatId);
-        const otherUserId = participantIds.find(id => id !== senderId);
-        if (otherUserId) {
-            const senderBlockedOther = await isBlocked(senderId, otherUserId);
-            if (senderBlockedOther) throw new AppError(403, "You have blocked this user", "BLOCKED");
-            const otherBlockedSender = await isBlocked(otherUserId, senderId);
-            if (otherBlockedSender) throw new AppError(403, "You are blocked by this user", "BLOCKED");
+export async function sendMessage(chatId, senderId, data) {
+    if (data.mediaId) {
+        // Attaching media grants the chat access to it, so only the uploader
+        // may attach it.
+        const attachment = await findMediaById(data.mediaId);
+        if (!attachment || attachment.uploaderId !== senderId) {
+            throw new AppError(403, "You cannot attach this media", "FORBIDDEN");
         }
     }
 
-    const message = await repo.createMessage({
+    if (data.replyToMessageId) {
+        await getMessageInChat(chatId, data.replyToMessageId);
+    }
+
+    const { message, created } = await repo.createMessage({
         chatId,
         senderId,
         type: data.type,
         content: data.content,
         mediaId: data.mediaId || null,
         replyToMessageId: data.replyToMessageId || null,
+        clientMessageId: data.clientMessageId || null,
     });
+
+    // A retry of a message that already went out: nobody needs telling twice.
+    if (!created) return { message, created };
 
     const mentionedUserIds = await syncMentions(message.id, chatId, data.content);
     // Never notify yourself for mentioning yourself.
@@ -76,12 +88,11 @@ export async function sendMessage(chatId, senderId, data) {
         { chatId, messageId: message.id, senderId },
     );
 
-    return message;
+    return { message, created };
 }
 
-export async function editMessage(messageId, userId, content) {
-    const message = await repo.findMessageById(messageId);
-    if (!message) throw new AppError(404, "Message not found", "NOT_FOUND");
+export async function editMessage(chatId, messageId, userId, content) {
+    const message = await getMessageInChat(chatId, messageId);
     if (message.senderId !== userId) {
         throw new AppError(403, "Can only edit your own messages", "FORBIDDEN");
     }
@@ -95,9 +106,8 @@ export async function editMessage(messageId, userId, content) {
     return updated;
 }
 
-export async function deleteMessage(messageId, userId) {
-    const message = await repo.findMessageById(messageId);
-    if (!message) throw new AppError(404, "Message not found", "NOT_FOUND");
+export async function deleteMessage(chatId, messageId, userId) {
+    const message = await getMessageInChat(chatId, messageId);
     if (message.senderId !== userId) {
         throw new AppError(403, "Can only delete your own messages", "FORBIDDEN");
     }
@@ -108,19 +118,18 @@ export async function deleteMessage(messageId, userId) {
     return repo.softDeleteMessage(messageId);
 }
 
-export async function addReaction(messageId, userId, reaction) {
-    const message = await repo.findMessageById(messageId);
-    if (!message) throw new AppError(404, "Message not found", "NOT_FOUND");
-
+export async function addReaction(chatId, messageId, userId, reaction) {
+    await getMessageInChat(chatId, messageId);
     return repo.upsertReaction(messageId, userId, reaction);
 }
 
-export async function removeReaction(messageId, userId, reaction) {
+export async function removeReaction(chatId, messageId, userId, reaction) {
+    await getMessageInChat(chatId, messageId);
     await repo.removeReaction(messageId, userId, reaction);
 }
 
 export async function markRead(chatId, messageIds, userId) {
-    await repo.markRead(messageIds, userId);
+    await repo.markRead(chatId, messageIds, userId);
     // Advance the unread watermark in the same pass, so the sidebar badge
     // clears without the client needing a second call.
     await advanceLastReadAt(chatId, userId);

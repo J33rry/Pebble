@@ -25,12 +25,12 @@ export async function canUserAccessMedia(mediaId, userId) {
 
     if (m.uploaderId === userId) return true;
 
-    const [access] = await db.execute(sql`
+    const { rows } = await db.execute(sql`
         SELECT 1 FROM messages msg
         JOIN chat_participants cp ON cp.chat_id = msg.chat_id AND cp.user_id = ${userId}
         WHERE msg.media_id = ${mediaId}
         LIMIT 1
     `);
 
-    return !!access;
+    return rows.length > 0;
 }

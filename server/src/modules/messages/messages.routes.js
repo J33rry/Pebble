@@ -2,13 +2,16 @@ import { Router } from "express";
 import * as ctrl from "./messages.controller.js";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireChatParticipant } from "../../middleware/chatAccess.js";
+import { rateLimiter, byUser } from "../../middleware/rateLimiter.js";
 
 const router = Router();
 
 router.use(requireAuth());
 
+const sendLimiter = rateLimiter({ name: "send-message", max: 120, keyFn: byUser });
+
 router.get("/:chatId/messages", requireChatParticipant, ctrl.getMessages);
-router.post("/:chatId/messages", requireChatParticipant, ctrl.sendMessage);
+router.post("/:chatId/messages", sendLimiter, requireChatParticipant, ctrl.sendMessage);
 router.patch(
     "/:chatId/messages/:messageId",
     requireChatParticipant,

@@ -52,10 +52,19 @@ export const joinCall = asyncHandler(async (req, res) => {
 });
 
 export const leaveCall = asyncHandler(async (req, res) => {
-    const participant = await callsService.leaveCall(
+    const { participant, ended, chatId } = await callsService.leaveCall(
         req.params.callId,
         req.user.id,
     );
+
+    // The last person left, so anyone still ringing needs to stop.
+    if (ended) {
+        broadcastToChat(chatId, {
+            type: "call:ended",
+            payload: { callId: req.params.callId },
+        }, null);
+    }
+
     res.json({ participant });
 });
 

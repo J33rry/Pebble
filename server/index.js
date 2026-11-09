@@ -8,17 +8,17 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import { RedisStore } from "connect-redis";
-import { createClient } from "redis";
 import cors from "cors";
 
 import { env } from "./src/config/env.js";
+import { redisClient } from "./src/lib/redis.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
+import { requireTrustedOrigin } from "./src/middleware/originCheck.js";
 import { setupWebSocketGateway, SOCKET_PATH } from "./src/ws/gateway.js";
 
 import authRoutes from "./src/modules/auth/auth.routes.js";
 import usersRoutes from "./src/modules/users/users.routes.js";
 import contactsRoutes from "./src/modules/contacts/contacts.routes.js";
-import blockedRoutes from "./src/modules/blocked/blocked.routes.js";
 import chatsRoutes from "./src/modules/chats/chats.routes.js";
 import messagesRoutes from "./src/modules/messages/messages.routes.js";
 import mediaRoutes from "./src/modules/media/media.routes.js";
@@ -26,11 +26,6 @@ import foldersRoutes from "./src/modules/folders/folders.routes.js";
 import callsRoutes from "./src/modules/calls/calls.routes.js";
 
 const app = express();
-
-// ── Redis client ──
-const redisClient = createClient({ url: env.REDIS_URL });
-redisClient.on("error", (err) => console.error("[REDIS]", err));
-await redisClient.connect();
 
 // ── Session middleware (shared with WS upgrade) ──
 app.set("trust proxy", 1); // add before session middleware
@@ -50,6 +45,7 @@ const sessionMiddleware = session({
 
 // ── Global middleware ──
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(requireTrustedOrigin);
 app.use(express.json());
 app.use(cookieParser());
 app.use(sessionMiddleware);
@@ -60,7 +56,6 @@ app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/contacts", contactsRoutes);
-app.use("/api/v1/blocked", blockedRoutes);
 app.use("/api/v1/chats", chatsRoutes);
 // Messages routes are scoped under /chats/:chatId/messages
 app.use("/api/v1/chats", messagesRoutes);

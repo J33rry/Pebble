@@ -15,7 +15,6 @@ import {
   Phone,
   Video,
   UserMinus,
-  ShieldAlert,
   Clock,
 } from "lucide-react";
 import { contactsApi, Contact } from "@/lib/api/contacts";
@@ -57,12 +56,6 @@ export default function ContactsPage() {
   });
   const contacts = contactsData?.contacts;
 
-  const { data: blockedData } = useQuery({
-    queryKey: ["blocked"],
-    queryFn: () => contactsApi.getBlockedUsers(),
-  });
-  const blockedUsers = blockedData?.blocked;
-
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery.trim()) {
@@ -99,24 +92,6 @@ export default function ContactsPage() {
     },
   });
 
-  const blockUserMutation = useMutation({
-    mutationFn: (userId: string) => contactsApi.blockUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      queryClient.invalidateQueries({ queryKey: ["blocked"] });
-      toast("User blocked", "info");
-    },
-  });
-
-  const unblockUserMutation = useMutation({
-    mutationFn: (userId: string) => contactsApi.unblockUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      queryClient.invalidateQueries({ queryKey: ["blocked"] });
-      toast("User unblocked", "success");
-    },
-  });
-
   const deleteContactMutation = useMutation({
     mutationFn: (id: string) => contactsApi.deleteContact(id),
     onSuccess: () => {
@@ -145,7 +120,6 @@ export default function ContactsPage() {
 
   const relationFor = (userId: string) => {
     if (userId === currentUser?.id) return "self";
-    if (blockedUsers?.some((b) => b.blockedUserId === userId)) return "blocked";
     const existing = contacts?.find((c) => c.contactId === userId || c.userId === userId);
     return existing?.status === "accepted" ? "connected" : existing?.status === "pending" ? "pending" : "none";
   };
@@ -208,8 +182,6 @@ export default function ContactsPage() {
                           </div>
                           {relation === "self" ? (
                             <span className="text-sm text-muted">You</span>
-                          ) : relation === "blocked" ? (
-                            <span className="text-sm text-danger">Blocked</span>
                           ) : relation === "connected" ? (
                             <button onClick={() => openDm(user.id)} className={softBtn}>
                               <MessageCircle className="h-4 w-4" /> Message
@@ -359,7 +331,6 @@ export default function ContactsPage() {
                         onMessage={() => openDm(contact.contactUser!.id)}
                         onCall={(type) => openDm(contact.contactUser!.id, type)}
                         onRemove={() => deleteContactMutation.mutate(contact.id)}
-                        onBlock={() => blockUserMutation.mutate(contact.contactUser!.id)}
                       />
                     ))}
                   </ul>
@@ -387,32 +358,6 @@ export default function ContactsPage() {
                   </ul>
                 </section>
               )}
-
-              {/* Blocked users */}
-              {blockedUsers && blockedUsers.length > 0 && (
-                <section id="blocked">
-                  <h3 className="text-lg font-semibold text-fg">Blocked</h3>
-                  <ul className="mt-2 divide-y divide-border">
-                    {blockedUsers.map((blocked) => (
-                      <li key={blocked.id} className="flex items-center gap-3.5 py-3">
-                        <Avatar
-                          src={blocked.blockedUser?.avatarUrl}
-                          name={blocked.blockedUser?.displayName}
-                          size="md"
-                          className="opacity-60"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-fg truncate">{blocked.blockedUser?.displayName}</p>
-                          <p className="text-sm text-muted truncate">@{blocked.blockedUser?.username}</p>
-                        </div>
-                        <button onClick={() => unblockUserMutation.mutate(blocked.blockedUserId)} className={softBtn}>
-                          Unblock
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
             </>
           )}
         </div>
@@ -432,7 +377,6 @@ function ContactRow({
   onMessage,
   onCall,
   onRemove,
-  onBlock,
 }: {
   contact: Contact;
   online: boolean;
@@ -444,7 +388,6 @@ function ContactRow({
   onMessage: () => void;
   onCall: (type: "audio" | "video") => void;
   onRemove: () => void;
-  onBlock: () => void;
 }) {
   const target = contact.contactUser!;
   const menuItem = "w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors hover:bg-surface-2";
@@ -503,9 +446,6 @@ function ContactRow({
               <div className="my-1 h-px bg-border" />
               <button onClick={() => { onMenu(false); onRemove(); }} className={clsx(menuItem, "hover:text-danger")}>
                 <UserMinus className="h-4 w-4" /> Remove contact
-              </button>
-              <button onClick={() => { onMenu(false); onBlock(); }} className={clsx(menuItem, "hover:text-danger")}>
-                <ShieldAlert className="h-4 w-4" /> Block
               </button>
             </div>
           </>

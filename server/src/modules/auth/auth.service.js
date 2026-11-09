@@ -5,14 +5,16 @@ import { OAuth2Client } from "google-auth-library";
 
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/AppError.js";
+import { isUniqueViolation } from "../../lib/dbErrors.js";
 import { sendPasswordResetEmail } from "../../lib/email.js";
+import { disconnectUserSockets } from "../../ws/connectionRegistry.js";
 import * as repo from "./auth.repository.js";
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
-function sanitizeUser(user) {
-    const { passwordHash, passwordResetNonce, ...safe } = user;
-    return safe;
+function toAuthResult(user) {
+    const { passwordHash, passwordResetNonce, sessionVersion, ...safe } = user;
+    return { user: safe, sessionVersion };
 }
 
 // ── Registration ──
@@ -25,14 +27,24 @@ export async function register({ username, displayName, email, password }) {
 
     const passwordHash = await argon2.hash(password);
 
-    const user = await repo.createUser({
-        username,
-        displayName,
-        email,
-        passwordHash,
-    });
-
-    return sanitizeUser(user);
+    try {
+        const user = await repo.createUser({
+            username,
+            displayName,
+            email,
+            passwordHash,
+        });
+        return toAuthResult(user);
+    } catch (err) {
+        if (isUniqueViolation(err, "users_username_unique")) {
+            throw new AppError(409, "Username already taken", "USERNAME_TAKEN");
+        }
+        // Lost a race with a concurrent registration for the same address.
+        if (isUniqueViolation(err, "users_email_unique")) {
+            throw new AppError(409, "Email already registered", "EMAIL_TAKEN");
+        }
+        throw err;
+    }
 }
 
 // ── Password Login ──
@@ -50,12 +62,22 @@ export async function loginWithPassword({ email, password }) {
         throw new AppError(401, "Invalid credentials", "INVALID_CREDENTIALS");
     }
 
-    return sanitizeUser(user);
+    return toAuthResult(user);
 }
 
 // ── Google Login ──
 
 export async function loginWithGoogle(idToken) {
+    // verifyIdToken skips the audience check when given no audience, which
+    // would accept a token Google issued for any other app.
+    if (!env.GOOGLE_CLIENT_ID) {
+        throw new AppError(
+            503,
+            "Google sign-in is not configured",
+            "GOOGLE_AUTH_DISABLED",
+        );
+    }
+
     let payload;
     try {
         const ticket = await googleClient.verifyIdToken({
@@ -71,20 +93,36 @@ export async function loginWithGoogle(idToken) {
         );
     }
 
-    if (!payload || !payload.email) {
+    if (!payload?.email || payload.email_verified !== true) {
         throw new AppError(
             401,
-            "Could not get email from Google",
+            "Google account email is not verified",
             "GOOGLE_AUTH_FAILED",
         );
     }
 
-    const email = payload.email;
+    const email = payload.email.toLowerCase();
     let user = await repo.findUserByEmail(email);
+
+    if (user && !user.emailVerifiedAt) {
+        // Google has just proven ownership of an address nobody had verified.
+        // Whoever set a password on this account may not be the owner, so the
+        // password and any sessions it opened do not survive this login.
+        const hadPassword = !!user.passwordHash;
+        user = await repo.updateUser(user.id, {
+            emailVerifiedAt: new Date(),
+            passwordHash: null,
+            passwordResetNonce: null,
+            ...(hadPassword && { sessionVersion: repo.nextSessionVersion }),
+        });
+        if (hadPassword) disconnectUserSockets(user.id);
+    }
 
     if (!user) {
         // Auto-register the user if they don't exist
-        const baseUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
+        // Leaves room in the 30-character column for a numeric suffix.
+        const baseUsername =
+            email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").slice(0, 24) || "user";
         let username = baseUsername;
         let counter = 1;
         // Basic unique username generation
@@ -95,14 +133,12 @@ export async function loginWithGoogle(idToken) {
                     displayName: payload.name || baseUsername,
                     email,
                     avatarUrl: payload.picture,
+                    emailVerifiedAt: new Date(),
                 });
                 break;
             } catch (e) {
                 // If unique constraint failed on username, try another
-                if (
-                    e.code === "23505" &&
-                    e.constraint === "users_username_unique"
-                ) {
+                if (isUniqueViolation(e, "users_username_unique")) {
                     username = `${baseUsername}${counter++}`;
                 } else {
                     throw e;
@@ -111,11 +147,13 @@ export async function loginWithGoogle(idToken) {
         }
     }
 
-    return sanitizeUser(user);
+    return toAuthResult(user);
 }
 
 // ── Password Change ──
 
+// Revokes every other session; returns the version the caller's session must
+// adopt to stay signed in.
 export async function changePassword(userId, currentPassword, newPassword) {
     const user = await repo.findUserById(userId);
 
@@ -131,7 +169,11 @@ export async function changePassword(userId, currentPassword, newPassword) {
     }
 
     const newHash = await argon2.hash(newPassword);
-    await repo.updateUser(userId, { passwordHash: newHash });
+    const updated = await repo.updateUser(userId, {
+        passwordHash: newHash,
+        sessionVersion: repo.nextSessionVersion,
+    });
+    return updated.sessionVersion;
 }
 
 // ── Forgot Password ──
@@ -151,7 +193,12 @@ export async function forgotPassword(email) {
     );
 
     const resetLink = `${env.CORS_ORIGIN}/reset-password?token=${resetToken}`;
-    await sendPasswordResetEmail(user.email, resetLink);
+
+    // Not awaited: a slow or failing send must not make known addresses
+    // distinguishable from unknown ones.
+    sendPasswordResetEmail(user.email, resetLink).catch((err) => {
+        console.error("[EMAIL] Failed to send password reset:", err.message);
+    });
 }
 
 export async function resetPassword(resetToken, newPassword) {
@@ -183,5 +230,9 @@ export async function resetPassword(resetToken, newPassword) {
     await repo.updateUser(user.id, {
         passwordHash: newHash,
         passwordResetNonce: null,
+        // Following the emailed link proves ownership of the address.
+        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        sessionVersion: repo.nextSessionVersion,
     });
+    disconnectUserSockets(user.id);
 }

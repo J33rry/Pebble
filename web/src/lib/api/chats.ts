@@ -21,7 +21,6 @@ export interface Chat {
   createdAt: string;
   updatedAt: string;
   myRole?: string;
-  isBlocked?: boolean;
   participants?: ChatParticipant[];
   // Sometimes returned by list queries
   latestMessage?: Message;

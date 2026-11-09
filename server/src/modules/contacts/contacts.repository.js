@@ -1,19 +1,8 @@
 import { db } from "../../db/index.js";
-import { contacts, blockedUsers, users } from "../../db/schema/index.js";
-import { eq, and, or, ne, notInArray, sql } from "drizzle-orm";
+import { contacts, users } from "../../db/schema/index.js";
+import { eq, and, or, sql } from "drizzle-orm";
 
 export async function findUserContacts(userId) {
-    // Exclude contacts where either party has blocked the other
-    const blockedIds = db
-        .select({ id: blockedUsers.blockedUserId })
-        .from(blockedUsers)
-        .where(eq(blockedUsers.userId, userId));
-
-    const blockedByIds = db
-        .select({ id: blockedUsers.userId })
-        .from(blockedUsers)
-        .where(eq(blockedUsers.blockedUserId, userId));
-
     return db
         .select({
             id: contacts.id,
@@ -31,20 +20,7 @@ export async function findUserContacts(userId) {
             users,
             sql`${users.id} = CASE WHEN ${contacts.userId} = ${userId} THEN ${contacts.contactId} ELSE ${contacts.userId} END`
         )
-        .where(
-            and(
-                or(eq(contacts.userId, userId), eq(contacts.contactId, userId)),
-                ne(contacts.status, "blocked"),
-                notInArray(
-                    sql`CASE WHEN ${contacts.userId} = ${userId} THEN ${contacts.contactId} ELSE ${contacts.userId} END`,
-                    blockedIds
-                ),
-                notInArray(
-                    sql`CASE WHEN ${contacts.userId} = ${userId} THEN ${contacts.contactId} ELSE ${contacts.userId} END`,
-                    blockedByIds
-                ),
-            ),
-        );
+        .where(or(eq(contacts.userId, userId), eq(contacts.contactId, userId)));
 }
 
 export async function findContactPair(userId, contactId) {
@@ -81,6 +57,39 @@ export async function updateContactStatus(id, status) {
     return contact;
 }
 
-export async function deleteContact(id) {
-    await db.delete(contacts).where(eq(contacts.id, id));
+// A contact is two rows, one per direction, which must always change together.
+export async function acceptContact(contact) {
+    return db.transaction(async (tx) => {
+        const now = new Date();
+        const [updated] = await tx
+            .update(contacts)
+            .set({ status: "accepted", updatedAt: now })
+            .where(eq(contacts.id, contact.id))
+            .returning();
+
+        await tx
+            .insert(contacts)
+            .values({
+                userId: contact.contactId,
+                contactId: contact.userId,
+                status: "accepted",
+            })
+            .onConflictDoUpdate({
+                target: [contacts.userId, contacts.contactId],
+                set: { status: "accepted", updatedAt: now },
+            });
+
+        return updated;
+    });
+}
+
+export async function deleteContactPair(userA, userB) {
+    await db
+        .delete(contacts)
+        .where(
+            or(
+                and(eq(contacts.userId, userA), eq(contacts.contactId, userB)),
+                and(eq(contacts.userId, userB), eq(contacts.contactId, userA)),
+            ),
+        );
 }

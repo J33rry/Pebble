@@ -40,7 +40,7 @@ export const createChat = asyncHandler(async (req, res) => {
 });
 
 export const getChat = asyncHandler(async (req, res) => {
-    const chat = await chatsService.getChat(req.params.chatId, req.user.id);
+    const chat = await chatsService.getChat(req.params.chatId);
     res.json({ chat });
 });
 

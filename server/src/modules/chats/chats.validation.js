@@ -4,7 +4,7 @@ export const createChatSchema = z.object({
     type: z.enum(["dm", "group"]),
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(500).optional(),
-    participantIds: z.array(z.string().uuid()).min(1),
+    participantIds: z.array(z.string().uuid()).min(1).max(256),
 });
 
 export const updateChatSchema = z.object({
@@ -14,7 +14,7 @@ export const updateChatSchema = z.object({
 });
 
 export const addParticipantsSchema = z.object({
-    userIds: z.array(z.string().uuid()).min(1),
+    userIds: z.array(z.string().uuid()).min(1).max(256),
 });
 
 export const updateParticipantSchema = z.object({

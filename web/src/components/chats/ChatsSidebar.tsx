@@ -293,7 +293,7 @@ export function ChatsSidebar() {
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto px-3 pt-2 pb-4">
         {isLoading ? (
-          <div className="pt-2"><ChatListSkeleton /></div>
+          <ChatListSkeleton />
         ) : (
           <ul className="space-y-0.5">
             {filteredChats.map((chat) => {

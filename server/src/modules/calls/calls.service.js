@@ -3,22 +3,9 @@ import { AppError } from "../../lib/AppError.js";
 import { createLiveKitToken, roomService } from "../../lib/livekit.js";
 import { env } from "../../config/env.js";
 import * as repo from "./calls.repository.js";
-import { isBlocked } from "../blocked/blocked.repository.js";
-import { findChatById, getChatParticipantUserIds } from "../chats/chats.repository.js";
+import { findChatById, findParticipant } from "../chats/chats.repository.js";
 
 export async function initiateCall(chatId, initiatorId, initiatorName, type) {
-    const chat = await findChatById(chatId);
-    
-    if (chat.type === "dm") {
-        const participantIds = await getChatParticipantUserIds(chatId);
-        const otherUserId = participantIds.find(id => id !== initiatorId);
-        if (otherUserId) {
-            const senderBlockedOther = await isBlocked(initiatorId, otherUserId);
-            if (senderBlockedOther) throw new AppError(403, "You have blocked this user", "BLOCKED");
-            const otherBlockedSender = await isBlocked(otherUserId, initiatorId);
-            if (otherBlockedSender) throw new AppError(403, "You are blocked by this user", "BLOCKED");
-        }
-    }
     const roomName = `call-${crypto.randomUUID()}`;
 
     const call = await repo.createCall({
@@ -57,7 +44,8 @@ export async function leaveCall(callId, userId) {
 
     // Auto-end call if no active participants remain
     const activeCount = await repo.findActiveParticipantCount(callId);
-    if (activeCount === 0 && !call.endedAt) {
+    const ended = activeCount === 0 && !call.endedAt;
+    if (ended) {
         await repo.endCall(callId);
         // Clean up the LiveKit room
         try {
@@ -67,13 +55,23 @@ export async function leaveCall(callId, userId) {
         }
     }
 
-    return participant;
+    return { participant, ended, chatId: call.chatId };
 }
 
 export async function endCall(callId, userId) {
     const call = await repo.findCallById(callId);
     if (!call) throw new AppError(404, "Call not found", "NOT_FOUND");
     if (call.endedAt) throw new AppError(400, "Call already ended", "CALL_ENDED");
+
+    // In a DM, hanging up ends it for both. In a group only the person who
+    // started the call or an admin can end it for everyone; others just leave.
+    const chat = await findChatById(call.chatId);
+    if (chat.type !== "dm" && call.initiatorId !== userId) {
+        const participant = await findParticipant(call.chatId, userId);
+        if (participant?.role !== "admin") {
+            throw new AppError(403, "Only the host or an admin can end this call", "CALL_END_FORBIDDEN");
+        }
+    }
 
     const ended = await repo.endCall(callId);
 
@@ -85,6 +83,23 @@ export async function endCall(callId, userId) {
     }
 
     return ended;
+}
+
+// A removed member must lose call access now, not when their connection ends.
+// Runs after the removal has committed, so a LiveKit failure can't undo it.
+export async function removeUserFromActiveCalls(chatId, userId) {
+    try {
+        for (const call of await repo.findActiveCallsForChat(chatId)) {
+            try {
+                await roomService.removeParticipant(call.roomName, userId);
+            } catch {
+                // Not connected to this room
+            }
+            await repo.leaveCall(call.id, userId);
+        }
+    } catch (err) {
+        console.error(`[CALLS] Failed to remove ${userId} from calls:`, err);
+    }
 }
 
 export async function getCallParticipants(callId) {

@@ -4,6 +4,7 @@ import {
     varchar,
     text,
     boolean,
+    integer,
     timestamp,
 } from "drizzle-orm/pg-core";
 // import { sql } from "drizzle-orm";
@@ -18,6 +19,7 @@ export const users = pgTable("users", {
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     passwordHash: text("password_hash"),
     passwordResetNonce: text("password_reset_nonce"),
+    sessionVersion: integer("session_version").notNull().default(0),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
         .notNull()

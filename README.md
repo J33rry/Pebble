@@ -45,7 +45,7 @@ Direct & group chat · audio/video calls · presence · typing indicators · med
 | ⚡ **Real-time** | Socket.IO gateway for live messages, presence (online / last-seen) & typing indicators |
 | 📞 **Calls** | Audio & video powered by [LiveKit](https://livekit.io) |
 | 🖼️ **Media** | Image / video / file sharing via [Cloudinary](https://cloudinary.com), with an in-app lightbox |
-| 👥 **Contacts** | Send / accept / reject requests, block & unblock users |
+| 👥 **Contacts** | Send / accept / reject requests |
 | 🔐 **Auth** | Redis-backed sessions with password (Argon2) **and** Google OAuth sign-in |
 | 🎨 **Theming** | Warm "editorial" design system — full light/dark (system preference + in-app toggle) |
 
@@ -74,8 +74,8 @@ Direct & group chat · audio/video calls · presence · typing indicators · med
 │       ├── config/            # ⚙️  Env schema & validation
 │       ├── db/                # 🗄️  Drizzle schema + migrations
 │       ├── middleware/        # 🛡️  requireAuth, access control, errors
-│       ├── modules/           # 🧩  auth · users · contacts · blocked · chats · messages · media · calls
-│       └── ws/                # 🔌  Socket.IO handlers (message · call · presence · typing)
+│       ├── modules/           # 🧩  auth · users · contacts · chats · messages · media · calls
+│       └── ws/                # 🔌  Socket.IO handlers (call · presence · typing)
 │
 └── 📁 web/                    # Next.js frontend
     └── src/
@@ -142,6 +142,9 @@ npm run dev               # ▶ http://localhost:3000
 | `GOOGLE_CLIENT_ID` | ➖ | Google OAuth client ID |
 | `LIVEKIT_URL` · `LIVEKIT_API_KEY` · `LIVEKIT_API_SECRET` | ➖ | LiveKit config (required for 📞 calls) |
 | `CLOUDINARY_CLOUD_NAME` · `CLOUDINARY_API_KEY` · `CLOUDINARY_API_SECRET` | ➖ | Cloudinary config (required for 🖼️ media) |
+| `SMTP_HOST` · `SMTP_PORT` · `SMTP_USER` · `SMTP_PASS` · `EMAIL_FROM` | ➖ | Sends password reset emails. Without it, dev prints the link to the server log and production sends nothing |
+
+> In production the server refuses to start without `GOOGLE_CLIENT_ID`, or with the development defaults for LiveKit, Cloudinary or the secrets.
 
 > 🔑 Generate secrets with: `openssl rand -base64 48`
 

@@ -16,6 +16,13 @@ export async function findCallById(id) {
     return call;
 }
 
+export async function findActiveCallsForChat(chatId) {
+    return db
+        .select()
+        .from(calls)
+        .where(and(eq(calls.chatId, chatId), isNull(calls.endedAt)));
+}
+
 export async function endCall(id) {
     const [call] = await db
         .update(calls)

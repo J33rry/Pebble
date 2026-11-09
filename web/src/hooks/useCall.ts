@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { callsApi, Call } from '@/lib/api/calls';
+import { ApiError } from '@/lib/api/client';
 import { socketClient } from '@/lib/ws/socket';
 
 export type CallState = 'idle' | 'ringing-outgoing' | 'ringing-incoming' | 'connecting' | 'connected' | 'ended';
@@ -105,18 +106,25 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
   endCall: async () => {
     const { activeCall } = get();
+    // Cleared before the request: disconnecting from the room fires its own
+    // exit, which must find nothing left to do.
+    set({ ...initialState });
     if (activeCall) {
       try {
         await callsApi.endCall(activeCall.id);
-      } catch {
-        // Best-effort — the room will be cleaned up server-side
+      } catch (err) {
+        // Group members can't end a call for everyone, so hanging up means leaving.
+        if (err instanceof ApiError && err.status === 403) {
+          await callsApi.leaveCall(activeCall.id).catch(() => {});
+        }
+        // Otherwise best-effort — the room will be cleaned up server-side
       }
     }
-    set({ ...initialState });
   },
 
   leaveCall: async () => {
     const { activeCall } = get();
+    set({ ...initialState });
     if (activeCall) {
       try {
         await callsApi.leaveCall(activeCall.id);
@@ -124,7 +132,6 @@ export const useCallStore = create<CallStore>((set, get) => ({
         // Best-effort
       }
     }
-    set({ ...initialState });
   },
 
   setConnected: () => {

@@ -10,7 +10,6 @@ import {
   Monitor,
   ShieldCheck,
   Lock,
-  UserX,
   LogOut,
   ChevronRight,
   type LucideIcon,
@@ -343,12 +342,6 @@ export default function SettingsPage() {
                   : `Email yourself a link to change your password.`
               }
               onClick={() => !resetPasswordMutation.isPending && resetPasswordMutation.mutate()}
-            />
-            <SettingsRow
-              icon={UserX}
-              title="Blocked people"
-              description="See who you've blocked and unblock them."
-              href="/contacts#blocked"
             />
             <SettingsRow
               icon={LogOut}

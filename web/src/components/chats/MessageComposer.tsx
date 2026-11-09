@@ -131,6 +131,11 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     }
   };
 
+  // Kept across a failed send: if the request actually reached the server and
+  // only the response was lost, resending the same message reuses this id and
+  // the server won't create a second copy.
+  const sendAttemptRef = useRef<{ id: string; fingerprint: string } | null>(null);
+
   const sendMessageMutation = useMutation({
     mutationFn: async ({
       text,
@@ -141,14 +146,21 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
       mediaId?: string;
       type: "text" | "image" | "video" | "audio" | "file";
     }) => {
+      const fingerprint = `${text}|${mediaId ?? ""}`;
+      if (sendAttemptRef.current?.fingerprint !== fingerprint) {
+        sendAttemptRef.current = { id: crypto.randomUUID(), fingerprint };
+      }
+
       return messagesApi.sendMessage(chatId, {
         type,
         content: text || undefined,
         mediaId,
         replyToMessageId: replyingToMessage?.id,
+        clientMessageId: sendAttemptRef.current.id,
       });
     },
     onSuccess: () => {
+      sendAttemptRef.current = null;
       setContent("");
       setSelectedFile(null);
       setIsUploading(false);

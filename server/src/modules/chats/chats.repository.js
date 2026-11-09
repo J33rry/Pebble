@@ -17,11 +17,8 @@ import {
     isNull,
     isNotNull,
 } from "drizzle-orm";
-
-export async function createChat(data) {
-    const [chat] = await db.insert(chats).values(data).returning();
-    return chat;
-}
+import { AppError } from "../../lib/AppError.js";
+import { beforeMessageCursor } from "../messages/messages.repository.js";
 
 export async function findChatById(id) {
     const [chat] = await db
@@ -150,14 +147,7 @@ export async function findChatMedia(chatId, { kind, before, limit = 30 }) {
         kind ? eq(messages.type, kind) : inArray(messages.type, MEDIA_KINDS),
     ];
 
-    if (before) {
-        const [cursor] = await db
-            .select({ createdAt: messages.createdAt })
-            .from(messages)
-            .where(eq(messages.id, before))
-            .limit(1);
-        if (cursor) conditions.push(lt(messages.createdAt, cursor.createdAt));
-    }
+    if (before) conditions.push(beforeMessageCursor(chatId, before));
 
     return db
         .select({
@@ -177,7 +167,7 @@ export async function findChatMedia(chatId, { kind, before, limit = 30 }) {
         .innerJoin(media, eq(media.id, messages.mediaId))
         .innerJoin(users, eq(users.id, messages.senderId))
         .where(and(...conditions))
-        .orderBy(desc(messages.createdAt))
+        .orderBy(desc(messages.createdAt), desc(messages.id))
         .limit(limit);
 }
 
@@ -190,14 +180,7 @@ export async function findChatLinks(chatId, { before, limit = 30 }) {
         sql`${messages.content} ~* 'https?://'`,
     ];
 
-    if (before) {
-        const [cursor] = await db
-            .select({ createdAt: messages.createdAt })
-            .from(messages)
-            .where(eq(messages.id, before))
-            .limit(1);
-        if (cursor) conditions.push(lt(messages.createdAt, cursor.createdAt));
-    }
+    if (before) conditions.push(beforeMessageCursor(chatId, before));
 
     return db
         .select({
@@ -211,7 +194,7 @@ export async function findChatLinks(chatId, { before, limit = 30 }) {
         .from(messages)
         .innerJoin(users, eq(users.id, messages.senderId))
         .where(and(...conditions))
-        .orderBy(desc(messages.createdAt))
+        .orderBy(desc(messages.createdAt), desc(messages.id))
         .limit(limit);
 }
 
@@ -253,9 +236,9 @@ export async function updateParticipantPreferences(chatId, userId, prefs) {
     return row;
 }
 
-export async function findDmBetween(userA, userB) {
+async function findDmBetween(userA, userB, executor) {
     // Find an existing DM chat between two users
-    const result = await db.execute(sql`
+    const result = await executor.execute(sql`
         SELECT c.id FROM chats c
         WHERE c.type = 'dm'
         AND EXISTS (
@@ -271,12 +254,54 @@ export async function findDmBetween(userA, userB) {
     return result.rows[0]?.id || null;
 }
 
-export async function addParticipant(chatId, userId, role = "member") {
-    const [participant] = await db
+// The lock is per user pair and held until commit, so two simultaneous requests
+// cannot both see "no DM yet" and create one each.
+export async function findOrCreateDm(userId, otherUserId) {
+    return db.transaction(async (tx) => {
+        const lockKey = [userId, otherUserId].sort().join(":");
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+
+        const existingId = await findDmBetween(userId, otherUserId, tx);
+        if (existingId) {
+            const [chat] = await tx.select().from(chats).where(eq(chats.id, existingId));
+            return { chat, created: false };
+        }
+
+        const [chat] = await tx
+            .insert(chats)
+            .values({ type: "dm", createdBy: userId })
+            .returning();
+        await tx.insert(chatParticipants).values([
+            { chatId: chat.id, userId, role: "member" },
+            { chatId: chat.id, userId: otherUserId, role: "member" },
+        ]);
+        return { chat, created: true };
+    });
+}
+
+export async function createGroupChat({ name, description, createdBy }, memberIds) {
+    return db.transaction(async (tx) => {
+        const [chat] = await tx
+            .insert(chats)
+            .values({ type: "group", name, description, createdBy })
+            .returning();
+        await tx.insert(chatParticipants).values([
+            { chatId: chat.id, userId: createdBy, role: "admin" },
+            ...memberIds.map((userId) => ({ chatId: chat.id, userId, role: "member" })),
+        ]);
+        return chat;
+    });
+}
+
+// Returns only the rows actually added; existing members are left untouched.
+export async function addMissingParticipants(chatId, userIds) {
+    return db
         .insert(chatParticipants)
-        .values({ chatId, userId, role })
+        .values(userIds.map((userId) => ({ chatId, userId, role: "member" })))
+        .onConflictDoNothing({
+            target: [chatParticipants.chatId, chatParticipants.userId],
+        })
         .returning();
-    return participant;
 }
 
 export async function findParticipant(chatId, userId) {
@@ -318,47 +343,74 @@ export async function getChatParticipantUserIds(chatId) {
     return rows.map((r) => r.userId);
 }
 
+// Admin rows are locked so two admins demoting each other at the same moment
+// cannot leave the group with none.
 export async function updateParticipantRole(chatId, userId, role) {
-    const [p] = await db
-        .update(chatParticipants)
-        .set({ role })
-        .where(
-            and(
-                eq(chatParticipants.chatId, chatId),
-                eq(chatParticipants.userId, userId),
-            ),
-        )
-        .returning();
-    return p;
+    return db.transaction(async (tx) => {
+        const admins = await tx
+            .select({ userId: chatParticipants.userId })
+            .from(chatParticipants)
+            .where(
+                and(
+                    eq(chatParticipants.chatId, chatId),
+                    eq(chatParticipants.role, "admin"),
+                ),
+            )
+            .for("update");
+
+        if (role !== "admin" && admins.length === 1 && admins[0].userId === userId) {
+            throw new AppError(400, "A group needs at least one admin", "LAST_ADMIN");
+        }
+
+        const [participant] = await tx
+            .update(chatParticipants)
+            .set({ role })
+            .where(
+                and(
+                    eq(chatParticipants.chatId, chatId),
+                    eq(chatParticipants.userId, userId),
+                ),
+            )
+            .returning();
+        return participant;
+    });
 }
 
-export async function removeParticipant(chatId, userId) {
-    await db
-        .delete(chatParticipants)
-        .where(
-            and(
-                eq(chatParticipants.chatId, chatId),
-                eq(chatParticipants.userId, userId),
-            ),
-        );
-}
+// Removes a member as one unit: a group's last admin hands over to its longest
+// standing member, and a group left with nobody is deleted.
+export async function removeMember(chatId, userId, { isGroup }) {
+    return db.transaction(async (tx) => {
+        const members = await tx
+            .select()
+            .from(chatParticipants)
+            .where(eq(chatParticipants.chatId, chatId))
+            .orderBy(chatParticipants.joinedAt)
+            .for("update");
 
-export async function countParticipants(chatId) {
-    const [result] = await db
-        .select({ count: sql`count(*)::int` })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, chatId));
-    return result.count;
-}
+        const target = members.find((m) => m.userId === userId);
+        if (!target) return { removed: false, chatDeleted: false };
 
-export async function findOldestNonAdminParticipant(chatId) {
-    const [p] = await db
-        .select()
-        .from(chatParticipants)
-        .where(eq(chatParticipants.chatId, chatId))
-        .orderBy(chatParticipants.joinedAt)
-        .limit(1);
-    return p;
+        const remaining = members.filter((m) => m.userId !== userId);
+
+        if (isGroup && remaining.length === 0) {
+            await tx.delete(chats).where(eq(chats.id, chatId));
+            return { removed: true, chatDeleted: true };
+        }
+
+        if (
+            isGroup &&
+            target.role === "admin" &&
+            !remaining.some((m) => m.role === "admin")
+        ) {
+            await tx
+                .update(chatParticipants)
+                .set({ role: "admin" })
+                .where(eq(chatParticipants.id, remaining[0].id));
+        }
+
+        await tx.delete(chatParticipants).where(eq(chatParticipants.id, target.id));
+        return { removed: true, chatDeleted: false };
+    });
 }
 
 export async function deleteChat(chatId) {

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { chatsApi } from "@/lib/api/chats";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Info, Phone, Video, ArrowLeft, Settings, ShieldCheck, MoreVertical, X } from "lucide-react";
+import { Info, Phone, Video, ArrowLeft, Settings, MoreVertical, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { formatLastSeen } from "@/lib/utils/presence";
@@ -14,6 +14,7 @@ import { ActiveCall } from "../calls/ActiveCall";
 import { useCallStore } from "@/hooks/useCall";
 import { ChatSettingsModal } from "./ChatSettingsModal";
 import { Avatar } from "@/components/ui/Avatar";
+import { ChatMainSkeleton } from "@/components/ui/Skeleton";
 import { usePresence } from "@/hooks/usePresence";
 import { ChatMediaPanel } from "./ChatMediaPanel";
 import { MediaLightbox } from "@/components/ui/MediaLightbox";
@@ -49,11 +50,7 @@ export function ChatMain({ chatId }: ChatMainProps) {
   const chat = data?.chat;
 
   if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-transparent">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <ChatMainSkeleton />;
   }
 
   if (!chat) {
@@ -75,6 +72,7 @@ export function ChatMain({ chatId }: ChatMainProps) {
   const otherUserOnline = !isGroup && otherParticipant ? isOnline(otherParticipant.id) : false;
   const otherUserLastSeen = !isGroup && otherParticipant ? (getLastSeen(otherParticipant.id) || otherParticipant.lastSeenAt) : null;
 
+  const myRole = chat.participants?.find((p) => p.userId === currentUser?.id)?.role;
   const memberCount = chat.participants?.length || 0;
   const onlineCount = chat.participants?.filter((p) => isOnline(p.userId)).length || 0;
 
@@ -182,6 +180,10 @@ export function ChatMain({ chatId }: ChatMainProps) {
             token={livekitToken}
             serverUrl={livekitUrl}
             callType={activeCall!.type}
+            isGroup={isGroup}
+            canEndForEveryone={
+              !isGroup || activeCall!.initiatorId === currentUser?.id || myRole === "admin"
+            }
           />
         )}
 
@@ -212,7 +214,7 @@ export function ChatMain({ chatId }: ChatMainProps) {
           <div className="flex items-center gap-1 shrink-0 text-muted">
             <button
               onClick={() => startCall(chatId, "audio")}
-              disabled={callState !== "idle" || chat.isBlocked}
+              disabled={callState !== "idle"}
               className="p-2.5 rounded-xl hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Start voice call"
             >
@@ -220,7 +222,7 @@ export function ChatMain({ chatId }: ChatMainProps) {
             </button>
             <button
               onClick={() => startCall(chatId, "video")}
-              disabled={callState !== "idle" || chat.isBlocked}
+              disabled={callState !== "idle"}
               className="p-2.5 rounded-xl hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Start video call"
             >
@@ -269,16 +271,7 @@ export function ChatMain({ chatId }: ChatMainProps) {
         <MessageList chatId={chatId} water={waterRef} />
 
         {/* Composer Area */}
-        {chat.isBlocked ? (
-          <div className="p-4 shrink-0 flex items-center justify-center">
-            <div className="flex items-center gap-2 text-muted text-sm bg-surface-2 px-4 py-2.5 rounded-full">
-              <ShieldCheck className="w-4 h-4" />
-              You cannot reply to this conversation.
-            </div>
-          </div>
-        ) : (
-          <MessageComposer chatId={chatId} />
-        )}
+        <MessageComposer chatId={chatId} />
       </div>
 
       {showInfo && infoPanel}

@@ -44,7 +44,7 @@ export const getMessages = asyncHandler(async (req, res) => {
 
 export const sendMessage = asyncHandler(async (req, res) => {
     const body = v.sendMessageSchema.parse(req.body);
-    const rawMessage = await messagesService.sendMessage(
+    const { message: rawMessage, created } = await messagesService.sendMessage(
         req.params.chatId,
         req.user.id,
         body,
@@ -73,17 +73,20 @@ export const sendMessage = asyncHandler(async (req, res) => {
     delete message.mediaFileName;
     delete message.mediaMimeType;
 
-    broadcastToChat(req.params.chatId, {
-        type: "message:new",
-        payload: message,
-    }, req.user.id);
+    if (created) {
+        broadcastToChat(req.params.chatId, {
+            type: "message:new",
+            payload: message,
+        }, req.user.id);
+    }
 
-    res.status(201).json({ message });
+    res.status(created ? 201 : 200).json({ message });
 });
 
 export const editMessage = asyncHandler(async (req, res) => {
     const { content } = v.editMessageSchema.parse(req.body);
     const message = await messagesService.editMessage(
+        req.params.chatId,
         req.params.messageId,
         req.user.id,
         content,
@@ -99,6 +102,7 @@ export const editMessage = asyncHandler(async (req, res) => {
 
 export const deleteMessage = asyncHandler(async (req, res) => {
     const message = await messagesService.deleteMessage(
+        req.params.chatId,
         req.params.messageId,
         req.user.id,
     );
@@ -114,6 +118,7 @@ export const deleteMessage = asyncHandler(async (req, res) => {
 export const addReaction = asyncHandler(async (req, res) => {
     const { reaction } = v.addReactionSchema.parse(req.body);
     const result = await messagesService.addReaction(
+        req.params.chatId,
         req.params.messageId,
         req.user.id,
         reaction,
@@ -135,6 +140,7 @@ export const addReaction = asyncHandler(async (req, res) => {
 export const removeReaction = asyncHandler(async (req, res) => {
     const { reaction } = v.removeReactionSchema.parse(req.body);
     await messagesService.removeReaction(
+        req.params.chatId,
         req.params.messageId,
         req.user.id,
         reaction,

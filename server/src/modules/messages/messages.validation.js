@@ -1,11 +1,16 @@
 import { z } from "zod";
 
-export const sendMessageSchema = z.object({
-    type: z.enum(["text", "image", "video", "audio", "file"]).default("text"),
-    content: z.string().max(4096).optional(),
-    mediaId: z.string().uuid().optional(),
-    replyToMessageId: z.string().uuid().optional(),
-});
+export const sendMessageSchema = z
+    .object({
+        type: z.enum(["text", "image", "video", "audio", "file"]).default("text"),
+        content: z.string().max(4096).optional(),
+        mediaId: z.string().uuid().optional(),
+        replyToMessageId: z.string().uuid().optional(),
+        clientMessageId: z.string().uuid().optional(),
+    })
+    .refine((m) => m.mediaId || m.content?.trim(), {
+        message: "A message needs text or an attachment",
+    });
 
 export const editMessageSchema = z.object({
     content: z.string().min(1).max(4096),

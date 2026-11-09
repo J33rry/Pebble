@@ -7,11 +7,47 @@ import {
     users,
     media,
 } from "../../db/schema/index.js";
-import { eq, and, lt, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 
+// Keyset condition for "older than this message". The cursor is compared inside
+// the query because created_at has microsecond precision, and reading it into a
+// JS Date first would truncate it and skip messages from the same millisecond.
+// `id` breaks exact ties. An id from another chat matches nothing.
+export function beforeMessageCursor(chatId, messageId) {
+    return sql`(${messages.createdAt}, ${messages.id}) < (
+        SELECT cursor_message.created_at, cursor_message.id
+        FROM messages cursor_message
+        WHERE cursor_message.id = ${messageId}
+          AND cursor_message.chat_id = ${chatId}
+    )`;
+}
+
+// Returns the existing message with created: false when clientMessageId has
+// already been used, so a retry is harmless.
 export async function createMessage(data) {
-    const [message] = await db.insert(messages).values(data).returning();
-    
+    const [inserted] = await db
+        .insert(messages)
+        .values(data)
+        .onConflictDoNothing({
+            target: [messages.chatId, messages.senderId, messages.clientMessageId],
+        })
+        .returning();
+
+    let message = inserted;
+    if (!message) {
+        [message] = await db
+            .select()
+            .from(messages)
+            .where(
+                and(
+                    eq(messages.chatId, data.chatId),
+                    eq(messages.senderId, data.senderId),
+                    eq(messages.clientMessageId, data.clientMessageId),
+                ),
+            )
+            .limit(1);
+    }
+
     if (message.mediaId) {
         const [m] = await db.select().from(media).where(eq(media.id, message.mediaId)).limit(1);
         if (m) {
@@ -28,8 +64,8 @@ export async function createMessage(data) {
         message.senderDisplayName = u.displayName;
         message.senderAvatarUrl = u.avatarUrl;
     }
-    
-    return message;
+
+    return { message, created: !!inserted };
 }
 
 export async function findMessageById(id) {
@@ -44,18 +80,8 @@ export async function findMessageById(id) {
 export async function findMessages(chatId, { before, limit }) {
     const conditions = [eq(messages.chatId, chatId)];
 
-    if (before) {
-        // Cursor-based pagination: get messages created before the cursor message
-        const [cursorMsg] = await db
-            .select({ createdAt: messages.createdAt })
-            .from(messages)
-            .where(eq(messages.id, before))
-            .limit(1);
+    if (before) conditions.push(beforeMessageCursor(chatId, before));
 
-        if (cursorMsg) {
-            conditions.push(lt(messages.createdAt, cursorMsg.createdAt));
-        }
-    }
     const fetchedMessages = await db
         .select({
             id: messages.id,
@@ -80,7 +106,7 @@ export async function findMessages(chatId, { before, limit }) {
         .innerJoin(users, eq(users.id, messages.senderId))
         .leftJoin(media, eq(media.id, messages.mediaId))
         .where(and(...conditions))
-        .orderBy(desc(messages.createdAt))
+        .orderBy(desc(messages.createdAt), desc(messages.id))
         .limit(limit);
 
     if (fetchedMessages.length === 0) return fetchedMessages;
@@ -172,18 +198,23 @@ export async function removeReaction(messageId, userId, reaction) {
 // Message status
 
 
-export async function markRead(messageIds, userId) {
-    const now = new Date();
+export async function markRead(chatId, messageIds, userId) {
+    // Ignore ids from other chats: the caller only proved membership of this one.
+    const inChat = await db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(and(eq(messages.chatId, chatId), inArray(messages.id, messageIds)));
 
-    for (const messageId of messageIds) {
-        await db
-            .insert(messageStatus)
-            .values({ messageId, userId, deliveredAt: now, readAt: now })
-            .onConflictDoUpdate({
-                target: [messageStatus.messageId, messageStatus.userId],
-                set: { readAt: sql`COALESCE(message_status.read_at, EXCLUDED.read_at)` },
-            });
-    }
+    if (inChat.length === 0) return;
+
+    const now = new Date();
+    await db
+        .insert(messageStatus)
+        .values(inChat.map(({ id }) => ({ messageId: id, userId, deliveredAt: now, readAt: now })))
+        .onConflictDoUpdate({
+            target: [messageStatus.messageId, messageStatus.userId],
+            set: { readAt: sql`COALESCE(message_status.read_at, EXCLUDED.read_at)` },
+        });
 }
 
 

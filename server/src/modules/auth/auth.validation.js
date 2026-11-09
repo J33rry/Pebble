@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// Addresses are stored and compared in lowercase.
+const emailField = z.string().trim().toLowerCase().email().max(255);
+
 export const registerSchema = z.object({
     username: z
         .string()
@@ -7,13 +10,13 @@ export const registerSchema = z.object({
         .max(30)
         .regex(/^[a-zA-Z0-9_]+$/, "Username must be alphanumeric or underscores"),
     displayName: z.string().min(1).max(100),
-    email: z.string().email().max(255),
+    email: emailField,
     password: z.string().min(8).max(128),
 });
 
 export const loginPasswordSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(1),
+    email: emailField,
+    password: z.string().min(1).max(128),
 });
 
 export const loginGoogleSchema = z.object({
@@ -26,7 +29,7 @@ export const passwordChangeSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
-    email: z.string().email(),
+    email: emailField,
 });
 
 export const resetPasswordSchema = z.object({

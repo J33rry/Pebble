@@ -1,9 +1,9 @@
 import { AppError } from "../../lib/AppError.js";
 import * as repo from "./chats.repository.js";
-import { isBlocked, findBlocksBetween } from "../blocked/blocked.repository.js";
 import { broadcastToChat, broadcastToUser } from "../../ws/connectionRegistry.js";
 import { findLatestMessagesForChats } from "../messages/messages.repository.js";
 import { findFolderIdsForChats } from "../folders/folders.repository.js";
+import { removeUserFromActiveCalls } from "../calls/calls.service.js";
 
 function mapParticipants(rawParticipants) {
     return rawParticipants.map(p => ({
@@ -45,26 +45,12 @@ export async function listChats(userId, { archived = false } = {}) {
         participantsByChat.get(p.chatId).push(p);
     }
 
-    // Resolve blocking for every DM counterpart at once.
-    const dmOtherUserIds = userChats
-        .filter(({ chat }) => chat.type === "dm")
-        .map(({ chat }) =>
-            (participantsByChat.get(chat.id) || []).find(p => p.userId !== userId)?.userId,
-        )
-        .filter(Boolean);
-    const blockedWith = await findBlocksBetween(userId, dmOtherUserIds);
-
     return userChats.map(({ chat, role, lastReadAt, pinnedAt, archivedAt, isMuted }) => {
         const rawParticipants = participantsByChat.get(chat.id) || [];
-        const otherUserId =
-            chat.type === "dm"
-                ? rawParticipants.find(p => p.userId !== userId)?.userId
-                : null;
 
         return {
             ...chat,
             myRole: role,
-            isBlocked: otherUserId ? blockedWith.has(otherUserId) : false,
             participants: mapParticipants(rawParticipants),
             latestMessage: latestByChat.get(chat.id) || null,
             unreadCount: unreadByChat.get(chat.id)?.unread || 0,
@@ -164,53 +150,37 @@ export async function createChat(userId, { type, name, description, participantI
         }
 
         const otherUserId = participantIds[0];
-
-        // Check blocking in either direction
-        if (await isBlocked(userId, otherUserId) || await isBlocked(otherUserId, userId)) {
-            throw new AppError(403, "Cannot create DM with this user", "BLOCKED");
+        if (otherUserId === userId) {
+            throw new AppError(400, "Cannot start a DM with yourself", "INVALID_DM");
         }
 
-        // Check for existing DM
-        const existingDmId = await repo.findDmBetween(userId, otherUserId);
-        if (existingDmId) {
-            const chat = await repo.findChatById(existingDmId);
-            return chat;
+        const { chat, created } = await repo.findOrCreateDm(userId, otherUserId);
+        if (created) {
+            broadcastToUser(otherUserId, { type: "chat:new", payload: { chatId: chat.id } });
         }
-
-        const chat = await repo.createChat({ type: "dm", createdBy: userId });
-        await repo.addParticipant(chat.id, userId, "member");
-        await repo.addParticipant(chat.id, otherUserId, "member");
-        
-        broadcastToUser(otherUserId, { type: "chat:new", payload: { chatId: chat.id } });
-        
         return chat;
     }
 
     // Group chat
-    const chat = await repo.createChat({ type: "group", name, description, createdBy: userId });
-    await repo.addParticipant(chat.id, userId, "admin");
-    for (const pId of participantIds) {
-        await repo.addParticipant(chat.id, pId, "member");
-        broadcastToUser(pId, { type: "chat:new", payload: { chatId: chat.id } });
+    const memberIds = [...new Set(participantIds)].filter((id) => id !== userId);
+    if (memberIds.length === 0) {
+        throw new AppError(400, "A group needs at least one other member", "INVALID_GROUP");
+    }
+
+    const chat = await repo.createGroupChat({ name, description, createdBy: userId }, memberIds);
+    for (const memberId of memberIds) {
+        broadcastToUser(memberId, { type: "chat:new", payload: { chatId: chat.id } });
     }
     return chat;
 }
 
-export async function getChat(chatId, userId) {
+export async function getChat(chatId) {
     const chat = await repo.findChatById(chatId);
     if (!chat) throw new AppError(404, "Chat not found", "NOT_FOUND");
 
     const rawParticipants = await repo.findChatParticipants(chatId);
-    
-    let blocked = false;
-    if (chat.type === "dm") {
-        const otherParticipant = rawParticipants.find(p => p.userId !== userId);
-        if (otherParticipant) {
-            blocked = await isBlocked(userId, otherParticipant.userId) || await isBlocked(otherParticipant.userId, userId);
-        }
-    }
-    
-    return { ...chat, isBlocked: blocked, participants: mapParticipants(rawParticipants) };
+
+    return { ...chat, participants: mapParticipants(rawParticipants) };
 }
 
 export async function updateChat(chatId, data) {
@@ -243,16 +213,11 @@ export async function addParticipants(chatId, userIds) {
         throw new AppError(400, "Cannot add participants to a DM", "DM_NO_ADD");
     }
 
-    const added = [];
-    for (const userId of userIds) {
-        const existing = await repo.findParticipant(chatId, userId);
-        if (!existing) {
-            const p = await repo.addParticipant(chatId, userId, "member");
-            added.push(p);
-            broadcastToUser(userId, { type: "chat:new", payload: { chatId } });
-        }
+    const added = await repo.addMissingParticipants(chatId, [...new Set(userIds)]);
+    for (const participant of added) {
+        broadcastToUser(participant.userId, { type: "chat:new", payload: { chatId } });
     }
-    
+
     if (added.length > 0) {
         broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
     }
@@ -260,11 +225,10 @@ export async function addParticipants(chatId, userIds) {
 }
 
 export async function updateParticipantRole(chatId, userId, role) {
-    const participant = await repo.findParticipant(chatId, userId);
-    if (!participant) {
+    const updated = await repo.updateParticipantRole(chatId, userId, role);
+    if (!updated) {
         throw new AppError(404, "Participant not found", "NOT_FOUND");
     }
-    const updated = await repo.updateParticipantRole(chatId, userId, role);
     broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
     return updated;
 }
@@ -281,27 +245,19 @@ export async function removeParticipant(chatId, userId, requestingUserId) {
         }
     }
 
-    const participantCount = await repo.countParticipants(chatId);
-
-    // If the user leaving is an admin and there are other participants,
-    // promote the oldest remaining member before they leave
-    if (userId === requestingUserId && participantCount > 1) {
-        const participants = await repo.findChatParticipants(chatId);
-        const admins = participants.filter(
-            (p) => p.role === "admin" && p.userId !== userId,
-        );
-
-        if (admins.length === 0 && chat.type === "group") {
-            const oldest = await repo.findOldestNonAdminParticipant(chatId);
-            if (oldest && oldest.userId !== userId) {
-                await repo.updateParticipantRole(chatId, oldest.userId, "admin");
-            }
-        }
+    const { removed, chatDeleted } = await repo.removeMember(chatId, userId, {
+        isGroup: chat.type === "group",
+    });
+    if (!removed) {
+        throw new AppError(404, "Participant not found", "NOT_FOUND");
     }
 
-    await repo.removeParticipant(chatId, userId);
+    await removeUserFromActiveCalls(chatId, userId);
+
     broadcastToUser(userId, { type: "chat:deleted", payload: { chatId } });
-    broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
+    if (!chatDeleted) {
+        broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
+    }
 }
 
 export async function getChatParticipantUserIds(chatId) {

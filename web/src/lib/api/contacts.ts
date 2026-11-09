@@ -5,20 +5,11 @@ export interface Contact {
   id: string;
   userId: string;
   contactId: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'blocked';
+  status: 'pending' | 'accepted' | 'rejected';
   createdAt: string;
   updatedAt: string;
   // Included by the backend
   contactUser?: User; 
-}
-
-export interface BlockedUser {
-  id: string;
-  userId: string;
-  blockedUserId: string;
-  createdAt: string;
-  // Included by the backend
-  blockedUser?: User;
 }
 
 export const contactsApi = {
@@ -36,18 +27,6 @@ export const contactsApi = {
   }),
   
   deleteContact: (contactId: string) => apiClient<void>(`/contacts/${contactId}`, {
-    method: 'DELETE',
-  }),
-
-  // Blocked Users
-  getBlockedUsers: () => apiClient<{ blocked: BlockedUser[] }>('/blocked'),
-
-  blockUser: (blockedUserId: string) => apiClient<{ block: BlockedUser }>('/blocked', {
-    method: 'POST',
-    body: JSON.stringify({ blockedUserId }),
-  }),
-
-  unblockUser: (blockedUserId: string) => apiClient<void>(`/blocked/${blockedUserId}`, {
     method: 'DELETE',
   }),
 };

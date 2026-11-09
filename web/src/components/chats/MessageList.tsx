@@ -602,12 +602,6 @@ export function MessageList({ chatId, water }: MessageListProps) {
         }
     });
 
-    useSocketEvent("message:new:ack", (payload: Message) => {
-        if (payload.chatId === chatId) {
-            queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-        }
-    });
-
     useSocketEvent("message:edit", (payload: Message) => {
         if (payload.chatId === chatId) {
             queryClient.invalidateQueries({ queryKey: ["messages", chatId] });

@@ -13,7 +13,9 @@ export async function createLiveKitToken(roomName, identity, name) {
     const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
         identity,
         name,
-        ttl: "2h",
+        // Only needs to last until the client joins; LiveKit refreshes it for
+        // connected participants. Short, so an unused token dies quickly.
+        ttl: "10m",
     });
 
     at.addGrant({
