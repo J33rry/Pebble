@@ -4,8 +4,8 @@ import { RefObject, useEffect, useRef } from "react";
 import { createWaterSurface } from "@/components/login/waterSurface";
 import { followTheme, toRgb } from "./waterTheme";
 
-// Still water behind an open conversation. Nothing disturbs it but arriving
-// messages, which call `surface` as they slide across it.
+// Still water behind a screen (an open conversation, an incoming call). Nothing
+// disturbs it but calls to `surface`, such as messages sliding across it.
 
 export interface ChatWaterHandle {
   /** Ripple the water under a screen rect (client coordinates); `strength` scales the push. */
@@ -32,7 +32,12 @@ export function ChatWater({ handleRef }: { handleRef: RefObject<ChatWaterHandle 
       water.resize(origin.width, origin.height, Math.min(window.devicePixelRatio || 1, 1.5));
     };
     resize();
-    const observer = new ResizeObserver(resize);
+    // Resizing blanks the canvases, so redraw at once rather than show a black frame.
+    const observer = new ResizeObserver(() => {
+      resize();
+      cancelAnimationFrame(raf);
+      step(performance.now());
+    });
     observer.observe(canvas);
 
     handleRef.current = {

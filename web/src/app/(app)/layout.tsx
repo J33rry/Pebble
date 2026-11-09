@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -8,28 +8,26 @@ import {
   Users,
   Phone,
   Contact,
-  User as UserIcon,
   SlidersHorizontal,
   LogOut,
   Loader2,
   Folder,
   FolderPlus,
-  Edit3,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { useSocket } from "@/hooks/useSocket";
 import { useCallEvents } from "@/hooks/useCallEvents";
 import { useUnread } from "@/hooks/useUnread";
 import { useChatFolder } from "@/hooks/useChatFolder";
+import { usePageWave, type WaveTo } from "@/hooks/usePageWave";
 import { foldersApi } from "@/lib/api/folders";
 import { IncomingCallModal } from "@/components/calls/IncomingCallModal";
 import { FolderManagerModal } from "@/components/chats/FolderManagerModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { PebbleMark } from "@/components/ui/PebbleMark";
-import { usePresence } from "@/hooks/usePresence";
 
 function CountBadge({ count, className }: { count: number; className?: string }) {
   if (count <= 0) return null;
@@ -45,20 +43,42 @@ function CountBadge({ count, className }: { count: number; className?: string })
   );
 }
 
+/** A nav link whose page change ripples out from beside the link. */
+function WaveLink({ href, waveTo, ...props }: ComponentProps<typeof Link> & { href: string; waveTo: WaveTo }) {
+  const ref = useRef<HTMLAnchorElement>(null);
+  return (
+    <Link
+      {...props}
+      href={href}
+      ref={ref}
+      onNavigate={(e) => {
+        if (!ref.current) return;
+        e.preventDefault();
+        waveTo(href, ref.current);
+      }}
+    />
+  );
+}
+
 function RailItem({
   label,
   icon: Icon,
+  iconNode,
   active,
   count = 0,
   href,
+  waveTo,
   onClick,
 }: {
   label: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  /** Custom artwork (e.g. the user's avatar) in place of `icon`. */
+  iconNode?: React.ReactNode;
   active?: boolean;
   count?: number;
   href?: string;
-  onClick?: () => void;
+  waveTo?: WaveTo;
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const className = clsx(
     "relative flex w-[84px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-[13px] font-medium transition-colors",
@@ -67,16 +87,16 @@ function RailItem({
   const content = (
     <>
       <span className="relative">
-        <Icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.8} />
+        {iconNode ?? (Icon && <Icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.8} />)}
         <CountBadge count={count} className="-top-2.5 left-3.5" />
       </span>
       <span className="max-w-full truncate">{label}</span>
     </>
   );
-  return href ? (
-    <Link href={href} onClick={onClick} className={className}>
+  return href && waveTo ? (
+    <WaveLink href={href} waveTo={waveTo} onClick={onClick} className={className}>
       {content}
-    </Link>
+    </WaveLink>
   ) : (
     <button type="button" onClick={onClick} className={className}>
       {content}
@@ -87,11 +107,9 @@ function RailItem({
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, isLoggingOut } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
-  const [showProfileCard, setShowProfileCard] = useState(false);
   const [isFoldersOpen, setIsFoldersOpen] = useState(false);
-  const { isOnline } = usePresence();
   const { folderId, setFolderId } = useChatFolder();
+  const { waveTo, panelRef, crestRef } = usePageWave();
 
   // Initialize websocket connection for authenticated user
   useSocket();
@@ -110,9 +128,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const onChats = pathname === "/" || pathname.startsWith("/chats");
 
-  const openFolder = (id: string | null) => {
+  const openFolder = (id: string | null, from: HTMLElement) => {
     setFolderId(id);
-    if (!onChats) router.push("/");
+    if (!onChats) waveTo("/", from);
   };
 
   const mobileNav = [
@@ -126,10 +144,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-full h-screen h-[100dvh] w-full bg-surface md:bg-rail overflow-hidden text-fg relative">
       {/* Desktop navigation rail */}
       <nav className="hidden md:flex w-[108px] shrink-0 flex-col items-center py-6 select-none h-full relative z-30">
-        <Link href="/" onClick={() => setFolderId(null)} className="flex flex-col items-center gap-1 mb-6" title="Pebble">
+        <WaveLink href="/" waveTo={waveTo} onClick={() => setFolderId(null)} className="flex flex-col items-center gap-1 mb-6" title="Pebble">
           <PebbleMark className="h-9 w-12" />
           <span className="text-[19px] font-semibold tracking-tight text-rail-fg">Pebble</span>
-        </Link>
+        </WaveLink>
 
         <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1.5 [scrollbar-width:none]">
           <RailItem
@@ -137,7 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             icon={MessageCircle}
             active={onChats && folderId === null}
             count={totalUnread}
-            onClick={() => openFolder(null)}
+            onClick={(e) => openFolder(null, e.currentTarget)}
           />
           {folders.map((f) => (
             <RailItem
@@ -146,7 +164,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               icon={Folder}
               active={onChats && folderId === f.id}
               count={f.unreadCount}
-              onClick={() => openFolder(f.id)}
+              onClick={(e) => openFolder(f.id, e.currentTarget)}
             />
           ))}
           <button
@@ -160,10 +178,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="my-2 h-px w-10 shrink-0 bg-rail-fg/25" />
 
-          <RailItem label="Calls" icon={Phone} href="/calls" active={pathname.startsWith("/calls")} />
-          <RailItem label="Contacts" icon={Users} href="/contacts" active={pathname.startsWith("/contacts")} />
-          <RailItem label="Profile" icon={UserIcon} active={showProfileCard} onClick={() => setShowProfileCard((v) => !v)} />
-          <RailItem label="Settings" icon={SlidersHorizontal} href="/settings" active={pathname.startsWith("/settings")} />
+          <RailItem label="Calls" icon={Phone} href="/calls" waveTo={waveTo} active={pathname.startsWith("/calls")} />
+          <RailItem label="Contacts" icon={Users} href="/contacts" waveTo={waveTo} active={pathname.startsWith("/contacts")} />
+          {/* Profile and settings share one page, so one entry: your avatar. */}
+          <RailItem
+            label="Settings"
+            href="/settings"
+            waveTo={waveTo}
+            active={pathname.startsWith("/settings")}
+            iconNode={
+              <span
+                className={clsx(
+                  "block rounded-[30%] ring-2 transition-shadow",
+                  pathname.startsWith("/settings") ? "ring-rail-fg" : "ring-transparent"
+                )}
+              >
+                <Avatar
+                  src={user?.avatarUrl}
+                  name={user?.displayName || user?.username}
+                  size="xs"
+                />
+              </span>
+            }
+          />
         </div>
 
         <button
@@ -175,48 +212,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Log out
         </button>
 
-        {/* Profile popover */}
-        {showProfileCard && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowProfileCard(false)} />
-            <div className="absolute bottom-24 left-[116px] z-50 w-80 rounded-3xl bg-surface p-5 space-y-4 shadow-[var(--shadow-lg)] border border-border animate-in-slide">
-              <div className="flex items-center gap-4">
-                <Avatar
-                  src={user?.avatarUrl}
-                  name={user?.displayName || user?.username}
-                  size="xl"
-                  showPresence
-                  isOnline={isOnline(user?.id)}
-                />
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-lg font-semibold text-fg truncate tracking-tight">{user?.displayName}</h4>
-                  <p className="text-sm text-muted truncate">@{user?.username}</p>
-                  <p className="text-xs text-faint truncate mt-0.5">{user?.email}</p>
-                </div>
-              </div>
-
-              {user?.bio && (
-                <p className="text-sm text-muted line-clamp-3 bg-surface-2 p-3 rounded-2xl">{user.bio}</p>
-              )}
-
-              <Link
-                href="/settings"
-                onClick={() => setShowProfileCard(false)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-2 py-2.5 text-sm font-medium text-accent hover:bg-surface-3 transition-colors"
-              >
-                <Edit3 className="w-4 h-4" />
-                Edit profile
-              </Link>
-            </div>
-          </>
-        )}
       </nav>
 
       <FolderManagerModal isOpen={isFoldersOpen} onClose={() => setIsFoldersOpen(false)} />
 
       {/* Main panel */}
       <main className="flex-1 flex h-full min-w-0 overflow-hidden relative md:py-3 md:pr-3">
-        <div className="flex-1 flex bg-surface md:rounded-[28px] overflow-hidden relative pb-20 md:pb-0">
+        <div ref={panelRef} data-page-wave-panel className="flex-1 flex bg-surface md:rounded-[28px] overflow-hidden relative pb-20 md:pb-0">
           {children}
         </div>
       </main>
@@ -225,9 +227,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden fixed bottom-3 left-3 right-3 z-30 flex items-center justify-center pointer-events-none">
         <div className="flex items-center justify-around w-full max-w-sm px-2 py-1.5 rounded-3xl bg-rail shadow-[var(--shadow-lg)] pointer-events-auto">
           {mobileNav.map((item) => (
-            <Link
+            <WaveLink
               key={item.name}
               href={item.href}
+              waveTo={waveTo}
               className={clsx(
                 "relative flex flex-col items-center justify-center w-16 py-1.5 rounded-2xl transition-colors",
                 item.active ? "text-rail-fg bg-white/12" : "text-rail-fg/60 hover:text-rail-fg"
@@ -236,10 +239,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <item.icon className="w-5 h-5 mb-1" />
               {item.href === "/" && <CountBadge count={totalUnread} className="-top-1 right-1.5 !h-[18px] !min-w-[18px] !text-[10px]" />}
               <span className="text-[10px] font-medium">{item.name}</span>
-            </Link>
+            </WaveLink>
           ))}
         </div>
       </div>
+
+      {/* The water of the page-change wave */}
+      <canvas ref={crestRef} data-page-wave-crest aria-hidden="true" className="pointer-events-none fixed z-[90]" />
 
       {/* Incoming call overlay — rendered above everything */}
       <IncomingCallModal />

@@ -4,7 +4,7 @@ import * as v from "./folders.validation.js";
 
 export const listFolders = asyncHandler(async (req, res) => {
     const folders = await foldersService.listFolders(req.user.id);
-    res.json({ folders });
+    res.json({ folders, limit: foldersService.MAX_FOLDERS });
 });
 
 export const createFolder = asyncHandler(async (req, res) => {

@@ -105,7 +105,7 @@ export function ChatSettingsModal({ chatId, onClose }: ChatSettingsModalProps) {
   if (isLoading || !data) {
     return (
       <Modal isOpen={true} onClose={onClose} title="Loading...">
-        <div className="p-8 text-center text-xs text-faint">Loading details...</div>
+        <div className="py-2 text-center text-xs text-faint">Loading details...</div>
       </Modal>
     );
   }
@@ -121,7 +121,7 @@ export function ChatSettingsModal({ chatId, onClose }: ChatSettingsModalProps) {
       title={isGroup ? "Group Settings" : "Chat Details"}
       maxWidth="md"
     >
-      <div className="p-6 space-y-6">
+      <div className="space-y-6">
         {/* Info Section */}
         {isGroup && (
           <div className="space-y-4">

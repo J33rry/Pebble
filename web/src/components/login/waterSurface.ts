@@ -11,6 +11,8 @@ const SIM_SIZE = 1024;
 // Pale milky water, used when no base colour is given.
 const LIGHT_BASE: [number, number, number] = [0.952, 0.954, 0.962];
 const STEP = 1 / 60;
+// Flat water extends past the screen so its absorbing border stays out of view.
+const FLAT_MARGIN = 1.2;
 // Height difference -> surface slope. Higher = punchier ripple highlights.
 const SLOPE = 16;
 
@@ -19,6 +21,12 @@ export interface WaterSurface {
   /** Disturb the water at a screen point (CSS px). Radius is in water-plane units. */
   drop(x: number, y: number, radius: number, strength: number): void;
   update(dt: number): void;
+  /** Run exactly this many simulation steps, for callers that keep their own clock. */
+  advance(steps: number): void;
+  /** Calm the water completely. */
+  clear(): void;
+  /** Flat water only: CSS px a wave front covers per simulation step. */
+  stepDistance(): number;
   /** Water heights along the left screen edge, one per row from the top (RGBA stride). */
   sampleLeftEdge(rows: number): Float32Array | null;
   /** Strength of the ambient swell, 0 (glassy) to 1 (default). */
@@ -100,6 +108,7 @@ uniform float uLight;
 uniform float uRefract;
 uniform float uAmbient;
 uniform vec3 uBase;
+uniform vec2 uFlatScale;
 
 const float C = ${C.toFixed(3)};
 const float A = ${A.toFixed(3)};
@@ -135,6 +144,7 @@ void main() {
   float k = C + t;
   vec2 p = vec2((vUv.x - 0.5) * uAspect / k, A / k);
   vec2 uv = vec2((p.x + uDomain * 0.5) / uDomain, (p.y - uYMin) / uDomain);
+  if (uFlatScale.x > 0.0) uv = (vUv - 0.5) * uFlatScale + 0.5;
 
   vec2 e = vec2(uTexel, 0.0);
   vec2 ripple = vec2(
@@ -161,7 +171,8 @@ void main() {
     // Pale milky surface: slopes facing the soft key light brighten, those
     // turned away pick up grey, so rings read as soft grey/white bands.
     // Ripples get the full contrast; the swell stays a faint sheen.
-    vec2 tiltDir = vec2(0.3, -0.9);
+    // Flat water is lit from the side, so fronts running across the screen still catch it.
+    vec2 tiltDir = uFlatScale.x > 0.0 ? vec2(0.9, -0.35) : vec2(0.3, -0.9);
     float facing = dot(ripple, tiltDir) * 9.0 + dot(ambient, tiltDir) * 1.6;
     // Shading scales with the base, so dark water keeps its contrast.
     float lum = dot(uBase, vec3(0.299, 0.587, 0.114));
@@ -232,11 +243,13 @@ export interface WaterOptions {
   base?: [number, number, number];
   /** Height-field resolution. Smaller grids carry rings across the screen faster. */
   simSize?: number;
+  /** Look straight down: no perspective, rings stay round. `drop` then takes its radius in CSS px. */
+  flat?: boolean;
 }
 
 export function createWaterSurface(
   canvas: HTMLCanvasElement,
-  { light = false, refract = 0.012, base = LIGHT_BASE, simSize = SIM_SIZE }: WaterOptions = {}
+  { light = false, refract = 0.012, base = LIGHT_BASE, simSize = SIM_SIZE, flat = false }: WaterOptions = {}
 ): WaterSurface | null {
   const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, premultipliedAlpha: false });
   if (!gl) return null;
@@ -325,14 +338,16 @@ export function createWaterSurface(
       canvas.height = Math.max(1, Math.round(h * dpr));
       // Square sim domain covering the visible trapezoid of water.
       yMin = A / (C + 1);
-      domain = Math.max(A / C - yMin, aspect / C);
+      domain = flat ? Math.max(w, h) * FLAT_MARGIN : Math.max(A / C - yMin, aspect / C);
     },
 
     drop(x, y, radius, strength) {
       const k = C + y / height;
       const px = ((x / width - 0.5) * aspect) / k;
       const py = A / k;
-      const center = [(px + domain / 2) / domain, (py - yMin) / domain];
+      const center = flat
+        ? [(x - width / 2) / domain + 0.5, (height / 2 - y) / domain + 0.5]
+        : [(px + domain / 2) / domain, (py - yMin) / domain];
       const program = programs.drop;
       simPass(program, () => {
         gl.uniform2f(gl.getUniformLocation(program, "uCenter"), center[0], center[1]);
@@ -351,6 +366,27 @@ export function createWaterSurface(
         accumulator -= STEP;
       }
     },
+
+    advance(steps) {
+      const program = programs.update;
+      for (let i = 0; i < steps; i++) {
+        simPass(program, () => {
+          gl.uniform2f(gl.getUniformLocation(program, "uDelta"), 1 / simSize, 1 / simSize);
+        });
+      }
+    },
+
+    clear() {
+      gl.clearColor(0, 0, 0, 0);
+      for (const target of targets) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    },
+
+    // The update step gives a wave speed of sqrt(1/2) grid cells per step.
+    stepDistance: () => (domain / simSize) * Math.SQRT1_2,
 
     setAmbient(amount) {
       ambientAmount = amount;
@@ -389,6 +425,11 @@ export function createWaterSurface(
       gl.uniform1f(gl.getUniformLocation(program, "uRefract"), refract);
       gl.uniform1f(gl.getUniformLocation(program, "uAmbient"), ambientAmount);
       gl.uniform3f(gl.getUniformLocation(program, "uBase"), ...baseColor);
+      gl.uniform2f(
+        gl.getUniformLocation(program, "uFlatScale"),
+        flat ? width / domain : 0,
+        flat ? height / domain : 0
+      );
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     },
 

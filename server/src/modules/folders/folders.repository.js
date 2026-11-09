@@ -23,12 +23,22 @@ export async function findFolderById(folderId) {
     return folder;
 }
 
-export async function createFolder(userId, { name, icon, position }) {
-    const [folder] = await db
-        .insert(chatFolders)
-        .values({ userId, name, icon, position: position ?? 0 })
-        .returning();
-    return folder;
+/** Inserts the folder unless the user already has `limit`; returns null when full. */
+export async function createFolderWithinLimit(userId, { name, icon, position }, limit) {
+    return db.transaction(async (tx) => {
+        // Serialise this user's creates so two at once can't both slip under the limit.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}::text))`);
+        const [{ count }] = await tx
+            .select({ count: sql`count(*)::int` })
+            .from(chatFolders)
+            .where(eq(chatFolders.userId, userId));
+        if (count >= limit) return null;
+        const [folder] = await tx
+            .insert(chatFolders)
+            .values({ userId, name, icon, position: position ?? 0 })
+            .returning();
+        return folder;
+    });
 }
 
 export async function updateFolder(folderId, patch) {

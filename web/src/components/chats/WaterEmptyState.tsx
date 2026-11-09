@@ -5,6 +5,7 @@ import { MessageCircle } from "lucide-react";
 import { createWaterSurface } from "@/components/login/waterSurface";
 import { drawStone, makeStone, stoneUnderside } from "@/components/login/stone";
 import { followTheme, toRgb } from "./waterTheme";
+import { collectWords, Word } from "./waterPaint";
 
 // Idle chat pane: a black pebble bobs on a water surface, and each landing sends
 // rings through the copy below. The copy is painted into the water so the
@@ -20,56 +21,11 @@ const REST_ANGLE = -0.22;
 const ICON_PATH =
   "M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719";
 
-interface Word {
-  text: string;
-  x: number;
-  y: number;
-  font: string;
-  spacing: string;
-  ink: "fg" | "muted" | "accent-fg";
-}
-
 interface Layout {
   words: Word[];
   button: { x: number; y: number; w: number; h: number; r: number };
   icon: { x: number; y: number; size: number };
   pebble: { x: number; y: number; w: number; h: number };
-}
-
-/** Position every word of `el` (relative to `origin`) so it can be redrawn on canvas. */
-function collectWords(
-  ctx: CanvasRenderingContext2D,
-  el: HTMLElement,
-  origin: DOMRect,
-  ink: Word["ink"],
-  out: Word[]
-) {
-  const cs = getComputedStyle(el);
-  const font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-  const spacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-  ctx.font = font;
-  ctx.letterSpacing = spacing;
-  const range = document.createRange();
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent ?? "";
-    for (const m of text.matchAll(/\S+/g)) {
-      range.setStart(node, m.index);
-      range.setEnd(node, m.index + m[0].length);
-      const r = range.getBoundingClientRect();
-      const metrics = ctx.measureText(m[0]);
-      const asc = metrics.fontBoundingBoxAscent;
-      const desc = metrics.fontBoundingBoxDescent;
-      out.push({
-        text: m[0],
-        x: r.left - origin.left,
-        y: r.top - origin.top + (r.height - (asc + desc)) / 2 + asc,
-        font,
-        spacing,
-        ink,
-      });
-    }
-  }
 }
 
 export function WaterEmptyState({ onStart }: { onStart: () => void }) {
@@ -165,9 +121,16 @@ export function WaterEmptyState({ onStart }: { onStart: () => void }) {
 
     readColors();
     measure();
-    const resizeObserver = new ResizeObserver(measure);
+    // Resizing blanks the canvases, so redraw at once rather than show a black frame.
+    const remeasure = () => {
+      if (container.dataset.water !== "on") return; // fonts can settle after unmount
+      measure();
+      cancelAnimationFrame(raf);
+      step(performance.now());
+    };
+    const resizeObserver = new ResizeObserver(remeasure);
     resizeObserver.observe(container);
-    document.fonts?.ready.then(measure);
+    document.fonts?.ready.then(remeasure);
 
     const stopTheme = followTheme(readColors);
 
@@ -225,7 +188,7 @@ export function WaterEmptyState({ onStart }: { onStart: () => void }) {
       octx.stroke(icon);
       octx.restore();
 
-      const ink = { fg: colors.fg, muted: colors.muted, "accent-fg": colors.accentFg };
+      const ink = { fg: colors.fg, muted: colors.muted, accent: colors.accent, "accent-fg": colors.accentFg };
       octx.textBaseline = "alphabetic";
       for (const w of L.words) {
         octx.font = w.font;

@@ -9,7 +9,6 @@ import {
   Check,
   X,
   ChevronRight,
-  ChevronDown,
   Star,
   MessageCircle,
   MoreHorizontal,
@@ -17,12 +16,9 @@ import {
   Video,
   UserMinus,
   ShieldAlert,
-  Users,
   Clock,
-  Loader2,
 } from "lucide-react";
 import { contactsApi, Contact } from "@/lib/api/contacts";
-import { chatsApi } from "@/lib/api/chats";
 import { usersApi, User } from "@/lib/api/users";
 import { useAuth } from "@/hooks/useAuth";
 import { usePresence } from "@/hooks/usePresence";
@@ -52,7 +48,6 @@ export default function ContactsPage() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
-  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [filter, setFilter] = useState<ContactFilter>("all");
   const [menuId, setMenuId] = useState<string | null>(null);
 
@@ -67,12 +62,6 @@ export default function ContactsPage() {
     queryFn: () => contactsApi.getBlockedUsers(),
   });
   const blockedUsers = blockedData?.blocked;
-
-  // Already loaded by the nav rail; used to suggest people you share chats with.
-  const { data: chatsData } = useQuery({
-    queryKey: ["chats"],
-    queryFn: () => chatsApi.getChats(),
-  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -152,25 +141,6 @@ export default function ContactsPage() {
   const visibleContacts =
     filter === "online" ? onlineContacts : filter === "favorite" ? favoriteContacts : acceptedContacts;
 
-  // Suggestions: people you share chats with who aren't contacts (or pending,
-  // or blocked) yet, ranked by how many chats you have in common.
-  const knownIds = new Set<string>([
-    currentUser?.id || "",
-    ...(contacts || []).flatMap((c) => [c.userId, c.contactId]),
-    ...(blockedUsers || []).map((b) => b.blockedUserId),
-  ]);
-  const shared = new Map<string, { user: User; count: number }>();
-  for (const chat of chatsData?.chats || []) {
-    for (const p of chat.participants || []) {
-      if (!p.user || knownIds.has(p.userId)) continue;
-      const entry = shared.get(p.userId) || { user: p.user, count: 0 };
-      entry.count++;
-      shared.set(p.userId, entry);
-    }
-  }
-  const suggestions = [...shared.values()].sort((a, b) => b.count - a.count);
-  const visibleSuggestions = showAllSuggestions ? suggestions : suggestions.slice(0, 5);
-
   const visibleRequests = showAllRequests ? incomingRequests : incomingRequests.slice(0, 3);
 
   const relationFor = (userId: string) => {
@@ -182,7 +152,7 @@ export default function ContactsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-bg select-none">
-      <div className="mx-auto grid max-w-[1400px] gap-6 p-5 sm:p-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mx-auto max-w-[1400px] p-5 sm:p-8">
         <div className="min-w-0 space-y-7">
           <header>
             <h1 className="text-[40px] font-semibold leading-tight text-fg tracking-tight">Find people</h1>
@@ -446,56 +416,6 @@ export default function ContactsPage() {
             </>
           )}
         </div>
-
-        {/* Suggestions */}
-        <aside className="h-fit rounded-3xl bg-surface p-6 shadow-[var(--shadow-md)] border border-border xl:sticky xl:top-8">
-          <h2 className="text-[24px] font-semibold text-fg tracking-tight">Suggested people</h2>
-          <p className="text-muted">People you share chats with on Pebble.</p>
-
-          {suggestions.length === 0 ? (
-            <p className="mt-6 rounded-2xl bg-surface-2/60 p-5 text-sm text-muted leading-relaxed">
-              No suggestions right now. People you meet in group chats will show up here.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-border">
-              {visibleSuggestions.map(({ user, count }) => (
-                <li key={user.id} className="flex items-center gap-3.5 py-4">
-                  <Avatar src={user.avatarUrl} name={user.displayName} size="xl" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[17px] font-semibold text-fg truncate">{user.displayName}</p>
-                    <p className="text-sm text-muted truncate">@{user.username}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted whitespace-nowrap">
-                      <Users className="h-4 w-4 shrink-0" />
-                      {count} shared chat{count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => sendRequestMutation.mutate(user.id)}
-                    disabled={sendRequestMutation.isPending && sendRequestMutation.variables === user.id}
-                    className={clsx(softBtn, "!px-3 !py-1.5")}
-                  >
-                    {sendRequestMutation.isPending && sendRequestMutation.variables === user.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <UserPlus className="h-4 w-4" />
-                    )}
-                    Connect
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {suggestions.length > 5 && (
-            <button
-              onClick={() => setShowAllSuggestions((v) => !v)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-surface-2 py-3 text-[15px] font-medium text-accent hover:bg-surface-3 transition-colors"
-            >
-              {showAllSuggestions ? "Show fewer" : "Show more suggestions"}
-              <ChevronDown className={clsx("h-4 w-4 transition-transform", showAllSuggestions && "rotate-180")} />
-            </button>
-          )}
-        </aside>
       </div>
     </div>
   );

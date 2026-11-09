@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { foldersApi, ChatFolder } from "@/lib/api/folders";
+import { ApiError } from "@/lib/api/client";
 import { chatsApi, Chat } from "@/lib/api/chats";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +38,8 @@ export function FolderManagerModal({ isOpen, onClose }: FolderManagerModalProps)
   });
 
   const folders: ChatFolder[] = foldersData?.folders || [];
+  const limit = foldersData?.limit;
+  const atLimit = limit !== undefined && folders.length >= limit;
   const chats: Chat[] = chatsData?.chats || [];
 
   const refresh = () => {
@@ -52,7 +55,9 @@ export function FolderManagerModal({ isOpen, onClose }: FolderManagerModalProps)
       refresh();
       toast("Folder created", "success");
     },
-    onError: () => toast("Could not create folder — is the name already used?", "error"),
+    // The server explains both refusals: a duplicate name, or the folder limit.
+    onError: (err) =>
+      toast(err instanceof ApiError ? err.message : "Could not create folder", "error"),
   });
 
   const deleteMutation = useMutation({
@@ -100,18 +105,26 @@ export function FolderManagerModal({ isOpen, onClose }: FolderManagerModalProps)
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="New folder name"
+            placeholder={atLimit ? "Folder limit reached" : "New folder name"}
             maxLength={50}
+            disabled={atLimit}
             className="flex-1"
           />
           <Button
             type="submit"
-            disabled={!newName.trim() || createMutation.isPending}
+            disabled={atLimit || !newName.trim() || createMutation.isPending}
             isLoading={createMutation.isPending}
           >
             Create
           </Button>
         </form>
+        {limit !== undefined && (
+          <p className={clsx("-mt-3 text-xs", atLimit ? "text-danger" : "text-faint")}>
+            {atLimit
+              ? `You've used all ${limit} folders. Delete one to make room.`
+              : `${folders.length} of ${limit} folders`}
+          </p>
+        )}
 
         {folders.length === 0 ? (
           <p className="text-xs text-faint italic text-center py-6">

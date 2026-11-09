@@ -291,6 +291,37 @@ button:focus-visible {
   animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Page-change wave (usePageWave): layers exist only while a wave is running. */
+html[data-page-wave] [data-page-wave-panel] {
+  view-transition-name: page-wave-panel;
+}
+[data-page-wave-crest] {
+  visibility: hidden;
+}
+html[data-page-wave] [data-page-wave-crest] {
+  visibility: visible;
+  view-transition-name: page-wave-crest;
+}
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-group(page-wave-panel),
+::view-transition-group(page-wave-crest),
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(page-wave-panel),
+::view-transition-new(page-wave-panel),
+::view-transition-new(page-wave-crest) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(page-wave-crest) {
+  display: none;
+}
+::view-transition-new(page-wave-panel) {
+  clip-path: var(--page-wave-clip);
+}
+
 /* Respect reduced-motion everywhere */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -121,7 +121,7 @@ export function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
       title="New Conversation"
       maxWidth="md"
     >
-      <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-col gap-4">
         {/* Type Toggle Tabs */}
         <div className="flex border border-border bg-surface-2/60 p-1 rounded-xl">
           <button

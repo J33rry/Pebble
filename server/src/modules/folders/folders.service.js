@@ -1,6 +1,9 @@
 import { AppError } from "../../lib/AppError.js";
 import * as repo from "./folders.repository.js";
 
+// Folders live in the nav rail, which only has room for so many.
+export const MAX_FOLDERS = 10;
+
 export async function listFolders(userId) {
     const [folders, unreadByFolder] = await Promise.all([
         repo.findUserFolders(userId),
@@ -24,7 +27,15 @@ function rethrowDuplicateName(err) {
 
 export async function createFolder(userId, data) {
     try {
-        return await repo.createFolder(userId, data);
+        const folder = await repo.createFolderWithinLimit(userId, data, MAX_FOLDERS);
+        if (!folder) {
+            throw new AppError(
+                409,
+                `You can have up to ${MAX_FOLDERS} folders. Delete one to make room.`,
+                "FOLDER_LIMIT",
+            );
+        }
+        return folder;
     } catch (err) {
         rethrowDuplicateName(err);
     }

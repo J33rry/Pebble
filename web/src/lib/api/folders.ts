@@ -18,7 +18,7 @@ export interface CreateFolderPayload {
 }
 
 export const foldersApi = {
-  getFolders: () => apiClient<{ folders: ChatFolder[] }>('/folders'),
+  getFolders: () => apiClient<{ folders: ChatFolder[]; limit?: number }>('/folders'),
 
   createFolder: (data: CreateFolderPayload) =>
     apiClient<{ folder: ChatFolder }>('/folders', {
