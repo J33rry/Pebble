@@ -1,195 +1,205 @@
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/header.svg"/><img src="assets/header.svg" alt="Pebble — secure, real-time messaging"/></picture>
+
 <div align="center">
 
-# 💬 One
-
-### A secure, real-time messaging platform
-
-Direct & group chat · audio/video calls · presence · typing indicators · media sharing
-
-<br />
-
-![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-
-![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white)
-![Express](https://img.shields.io/badge/Express-5-000000?style=for-the-badge&logo=express&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Drizzle-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-Sessions-DC382D?style=for-the-badge&logo=redis&logoColor=white)
-![LiveKit](https://img.shields.io/badge/LiveKit-Calls-FF6352?style=for-the-badge&logo=livekit&logoColor=white)
+<a href="https://github.com/J33rry/One"><picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/REPO-0d1117?style=flat-square&logo=github&logoColor=ffffff"/><img src="https://img.shields.io/badge/REPO-ffffff?style=flat-square&logo=github&logoColor=000000" alt="Repository"/></picture></a>
+<a href="#05-quickstart"><picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/QUICKSTART-0d1117?style=flat-square&logo=rocket&logoColor=ffffff"/><img src="https://img.shields.io/badge/QUICKSTART-ffffff?style=flat-square&logo=rocket&logoColor=000000" alt="Quick start"/></picture></a>
+<a href="#08-deploy"><picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/DEPLOY-0d1117?style=flat-square&logo=vercel&logoColor=ffffff"/><img src="https://img.shields.io/badge/DEPLOY-ffffff?style=flat-square&logo=vercel&logoColor=000000" alt="Deploy"/></picture></a>
+<a href="#09-license"><picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/LICENSE%20ISC-0d1117?style=flat-square&logoColor=ffffff"/><img src="https://img.shields.io/badge/LICENSE%20ISC-ffffff?style=flat-square&logoColor=000000" alt="ISC License"/></picture></a>
 
 </div>
 
----
+<br>
 
-## 📑 Table of Contents
+<a id="01-overview"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s01.svg"/><img src="assets/s01.svg" alt="01 overview"/></picture>
 
-- [✨ Features](#-features)
-- [🧱 Tech Stack](#-tech-stack)
-- [🗂️ Project Structure](#️-project-structure)
-- [✅ Prerequisites](#-prerequisites)
-- [🚀 Quick Start](#-quick-start)
-- [🔐 Environment Variables](#-environment-variables)
-- [📜 Scripts](#-scripts)
-- [☁️ Deployment](#️-deployment)
-- [📄 License](#-license)
+**Pebble** is a secure, real-time messaging platform — direct and group chat, audio and
+video calls, live presence and typing, media sharing, and a soft lavender interface that
+follows your system theme.
 
----
+```
+status    building
+web       next.js 16 · react 19 · tailwind v4
+server    express 5 · socket.io · drizzle · postgres · redis
+calls     livekit
+media     cloudinary
+```
 
-## ✨ Features
+<br>
 
-| | |
-|---|---|
-| 💬 **Messaging** | 1:1 and group chats — edit, delete, replies, reactions, read/delivery status |
-| ⚡ **Real-time** | Socket.IO gateway for live messages, presence (online / last-seen) & typing indicators |
-| 📞 **Calls** | Audio & video powered by [LiveKit](https://livekit.io) |
-| 🖼️ **Media** | Image / video / file sharing via [Cloudinary](https://cloudinary.com), with an in-app lightbox |
-| 👥 **Contacts** | Send / accept / reject requests |
-| 🔐 **Auth** | Redis-backed sessions with password (Argon2) **and** Google OAuth sign-in |
-| 🎨 **Theming** | Warm "editorial" design system — full light/dark (system preference + in-app toggle) |
+<a id="02-features"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s02.svg"/><img src="assets/s02.svg" alt="02 features"/></picture>
 
----
+| feature | what it does |
+| --- | --- |
+| `messaging` | 1:1 and group chats — edit, delete, replies, reactions, mentions, read / delivery status |
+| `real-time` | Socket.IO gateway for live messages, presence (online / last seen) and typing indicators |
+| `calls` | audio and video calls powered by [LiveKit](https://livekit.io) |
+| `media` | image, video, file and voice-note sharing via [Cloudinary](https://cloudinary.com), with an in-app lightbox |
+| `folders` | organise chats into folders, plus favourites and unread tracking |
+| `contacts` | send, accept and reject contact requests |
+| `auth` | Redis-backed sessions with password (Argon2) **and** Google sign-in, plus email password reset |
+| `theming` | "Pebble" design system — full light / dark, follows the OS or an in-app toggle |
 
-## 🧱 Tech Stack
+<br>
 
-**🖥️ Frontend**
+<a id="03-stack"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s03.svg"/><img src="assets/s03.svg" alt="03 stack"/></picture>
 
-`Next.js 16 (App Router)` · `React 19` · `Tailwind CSS v4` · `TanStack Query` · `Zustand` · `react-hook-form + Zod` · `LiveKit client` · `lucide-react`
+<div align="center">
 
-**⚙️ Backend**
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Next.js-0d1117?style=flat-square&logo=nextdotjs&logoColor=ffffff"/><img src="https://img.shields.io/badge/Next.js-ffffff?style=flat-square&logo=nextdotjs&logoColor=000000" alt="Next.js"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/React-0d1117?style=flat-square&logo=react&logoColor=ffffff"/><img src="https://img.shields.io/badge/React-ffffff?style=flat-square&logo=react&logoColor=000000" alt="React"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/TypeScript-0d1117?style=flat-square&logo=typescript&logoColor=ffffff"/><img src="https://img.shields.io/badge/TypeScript-ffffff?style=flat-square&logo=typescript&logoColor=000000" alt="TypeScript"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Tailwind%20CSS-0d1117?style=flat-square&logo=tailwindcss&logoColor=ffffff"/><img src="https://img.shields.io/badge/Tailwind%20CSS-ffffff?style=flat-square&logo=tailwindcss&logoColor=000000" alt="Tailwind CSS"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/TanStack%20Query-0d1117?style=flat-square&logo=reactquery&logoColor=ffffff"/><img src="https://img.shields.io/badge/TanStack%20Query-ffffff?style=flat-square&logo=reactquery&logoColor=000000" alt="TanStack Query"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Zod-0d1117?style=flat-square&logo=zod&logoColor=ffffff"/><img src="https://img.shields.io/badge/Zod-ffffff?style=flat-square&logo=zod&logoColor=000000" alt="Zod"/></picture>
 
-`Node.js` · `Express 5` · `Drizzle ORM` · `PostgreSQL` · `Redis` (`express-session` + `connect-redis`) · `Socket.IO` gateway · `LiveKit server SDK` · `Cloudinary` · `Argon2` · `Zod`
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Node.js-0d1117?style=flat-square&logo=nodedotjs&logoColor=ffffff"/><img src="https://img.shields.io/badge/Node.js-ffffff?style=flat-square&logo=nodedotjs&logoColor=000000" alt="Node.js"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Express-0d1117?style=flat-square&logo=express&logoColor=ffffff"/><img src="https://img.shields.io/badge/Express-ffffff?style=flat-square&logo=express&logoColor=000000" alt="Express"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Socket.IO-0d1117?style=flat-square&logo=socketdotio&logoColor=ffffff"/><img src="https://img.shields.io/badge/Socket.IO-ffffff?style=flat-square&logo=socketdotio&logoColor=000000" alt="Socket.IO"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/PostgreSQL-0d1117?style=flat-square&logo=postgresql&logoColor=ffffff"/><img src="https://img.shields.io/badge/PostgreSQL-ffffff?style=flat-square&logo=postgresql&logoColor=000000" alt="PostgreSQL"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Drizzle-0d1117?style=flat-square&logo=drizzle&logoColor=ffffff"/><img src="https://img.shields.io/badge/Drizzle-ffffff?style=flat-square&logo=drizzle&logoColor=000000" alt="Drizzle ORM"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Redis-0d1117?style=flat-square&logo=redis&logoColor=ffffff"/><img src="https://img.shields.io/badge/Redis-ffffff?style=flat-square&logo=redis&logoColor=000000" alt="Redis"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/LiveKit-0d1117?style=flat-square&logo=livekit&logoColor=ffffff"/><img src="https://img.shields.io/badge/LiveKit-ffffff?style=flat-square&logo=livekit&logoColor=000000" alt="LiveKit"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Cloudinary-0d1117?style=flat-square&logo=cloudinary&logoColor=ffffff"/><img src="https://img.shields.io/badge/Cloudinary-ffffff?style=flat-square&logo=cloudinary&logoColor=000000" alt="Cloudinary"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Docker-0d1117?style=flat-square&logo=docker&logoColor=ffffff"/><img src="https://img.shields.io/badge/Docker-ffffff?style=flat-square&logo=docker&logoColor=000000" alt="Docker"/></picture>
 
----
+</div>
 
-## 🗂️ Project Structure
+<br>
+
+<a id="04-structure"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s04.svg"/><img src="assets/s04.svg" alt="04 structure"/></picture>
 
 ```
 .
-├── 📁 server/                 # Express API + Socket.IO gateway
-│   ├── index.js               # Entry: middleware, session, routes, Socket.IO server
-│   ├── docker-compose.yml     # Local Postgres + Redis + LiveKit
+├── server/                  express api + socket.io gateway
+│   ├── index.js             entry: middleware, session, routes, socket.io server
+│   ├── docker-compose.yml   local postgres + redis + livekit
 │   └── src/
-│       ├── config/            # ⚙️  Env schema & validation
-│       ├── db/                # 🗄️  Drizzle schema + migrations
-│       ├── middleware/        # 🛡️  requireAuth, access control, errors
-│       ├── modules/           # 🧩  auth · users · contacts · chats · messages · media · calls
-│       └── ws/                # 🔌  Socket.IO handlers (call · presence · typing)
+│       ├── config/          env schema & validation
+│       ├── db/              drizzle schema + migrations
+│       ├── middleware/      requireAuth, access control, errors
+│       ├── modules/         auth · users · contacts · chats · folders · messages · media · calls
+│       └── ws/              socket.io handlers (call · presence · typing)
 │
-└── 📁 web/                    # Next.js frontend
+└── web/                     next.js frontend
     └── src/
-        ├── app/               # 🧭  Routes: (auth) + (app) route groups
-        ├── components/        # 🎨  UI primitives, chats, calls, layout
-        ├── hooks/             # 🪝  useAuth · useSocket · useCall · useTyping · usePresence
-        └── lib/               # 📡  API clients + WS client
+        ├── app/             routes: (pebble) auth + (app) route groups
+        ├── components/      ui primitives, chats, calls, contacts, settings, layout
+        ├── hooks/           useAuth · useSocket · useCall · useTyping · usePresence · …
+        └── lib/             api clients + ws client
 ```
 
----
+<br>
 
-## ✅ Prerequisites
+<a id="05-quickstart"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s05.svg"/><img src="assets/s05.svg" alt="05 quickstart"/></picture>
 
-- 🟢 **Node.js 20+**
-- 🐳 **Docker** — recommended for local Postgres + Redis + LiveKit (or bring your own)
+```
+requires  node.js 20+ · docker (for local postgres + redis + livekit, or bring your own)
+```
 
----
-
-## 🚀 Quick Start
-
-**1️⃣ — Start infrastructure** (Postgres · Redis · LiveKit)
+**1 — infrastructure**
 
 ```bash
 cd server
 docker compose up -d
 ```
 
-**2️⃣ — Server**
+**2 — server**
 
 ```bash
 cd server
-cp .env.example .env      # fill in the values (see 🔐 Environment Variables)
+cp .env.example .env      # fill in the values (see 06 environment)
 npm install
-npm run db:push           # apply the Drizzle schema
-npm run dev               # ▶ http://localhost:3002
+npm run db:push           # apply the drizzle schema
+npm run dev               # http://localhost:3002
 ```
 
-**3️⃣ — Web**
+**3 — web**
 
 ```bash
 cd web
-# create web/.env.local (see 🔐 Environment Variables)
+# create web/.env.local (see 06 environment)
 npm install
-npm run dev               # ▶ http://localhost:3000
+npm run dev               # http://localhost:3000
 ```
 
-> 🎉 Open **http://localhost:3000** and sign up.
+Open **http://localhost:3000** and sign up.
 
----
+<br>
 
-## 🔐 Environment Variables
+<a id="06-environment"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s06.svg"/><img src="assets/s06.svg" alt="06 environment"/></picture>
 
-### ⚙️ Server — `server/.env`
+**server** — `server/.env`
 
-| Key | Req | Description |
-|---|:---:|---|
-| `NODE_ENV` | ➖ | `development` \| `production` (default `development`) |
-| `PORT` | ➖ | API port (default `5000`; local dev commonly `3002`) |
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `REDIS_URL` | ✅ | Redis connection string (session store) |
-| `SESSION_SECRET` | ✅ | 32+ char random string |
-| `JWT_SECRET` | ✅ | 32+ char random string (password-reset tokens) |
-| `CORS_ORIGIN` | ✅ | Exact frontend origin, e.g. `http://localhost:3000` |
-| `GOOGLE_CLIENT_ID` | ➖ | Google OAuth client ID |
-| `LIVEKIT_URL` · `LIVEKIT_API_KEY` · `LIVEKIT_API_SECRET` | ➖ | LiveKit config (required for 📞 calls) |
-| `CLOUDINARY_CLOUD_NAME` · `CLOUDINARY_API_KEY` · `CLOUDINARY_API_SECRET` | ➖ | Cloudinary config (required for 🖼️ media) |
-| `SMTP_HOST` · `SMTP_PORT` · `SMTP_USER` · `SMTP_PASS` · `EMAIL_FROM` | ➖ | Sends password reset emails. Without it, dev prints the link to the server log and production sends nothing |
+| key | req | description |
+| --- | :---: | --- |
+| `NODE_ENV` | | `development` \| `production` (default `development`) |
+| `PORT` | | API port (default `5000`; local dev commonly `3002`) |
+| `DATABASE_URL` | ✓ | PostgreSQL connection string |
+| `REDIS_URL` | ✓ | Redis connection string (session store) |
+| `SESSION_SECRET` | ✓ | 32+ char random string |
+| `JWT_SECRET` | ✓ | 32+ char random string (password-reset tokens) |
+| `CORS_ORIGIN` | ✓ | exact frontend origin, e.g. `http://localhost:3000` |
+| `GOOGLE_CLIENT_ID` | | Google OAuth client ID |
+| `LIVEKIT_URL` · `LIVEKIT_API_KEY` · `LIVEKIT_API_SECRET` | | LiveKit config (required for calls) |
+| `CLOUDINARY_CLOUD_NAME` · `CLOUDINARY_API_KEY` · `CLOUDINARY_API_SECRET` | | Cloudinary config (required for media) |
+| `SMTP_HOST` · `SMTP_PORT` · `SMTP_USER` · `SMTP_PASS` · `EMAIL_FROM` | | password-reset emails. Without it, dev prints the link to the server log and production sends nothing |
 
-> In production the server refuses to start without `GOOGLE_CLIENT_ID`, or with the development defaults for LiveKit, Cloudinary or the secrets.
+> In production the server refuses to start without `GOOGLE_CLIENT_ID`, or with the development defaults for LiveKit, Cloudinary or the secrets. Generate secrets with `openssl rand -base64 48`.
 
-> 🔑 Generate secrets with: `openssl rand -base64 48`
+**web** — `web/.env.local`
 
-### 🖥️ Web — `web/.env.local`
-
-| Key | Description |
-|---|---|
+| key | description |
+| --- | --- |
 | `NEXT_PUBLIC_API_URL` | API base URL **including** `/api/v1` — e.g. `http://localhost:3002/api/v1` |
-| `NEXT_PUBLIC_WEBSOCKET_URL` | Socket.IO server origin **without** a path — e.g. `http://localhost:3002` <br/>_(the client connects over the `/ws` Socket.IO path)_ |
+| `NEXT_PUBLIC_WEBSOCKET_URL` | Socket.IO origin **without** a path — e.g. `http://localhost:3002` (the client connects over the `/ws` path) |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth client ID |
 
-> ⚠️ `NEXT_PUBLIC_*` values are inlined at build time — **rebuild/redeploy** after changing them.
+> `NEXT_PUBLIC_*` values are inlined at build time — rebuild / redeploy after changing them.
 
----
+<br>
 
-## 📜 Scripts
+<a id="07-scripts"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s07.svg"/><img src="assets/s07.svg" alt="07 scripts"/></picture>
 
 <table>
-<tr><th>⚙️ Server <code>(cd server)</code></th><th>🖥️ Web <code>(cd web)</code></th></tr>
+<tr><th><code>cd server</code></th><th><code>cd web</code></th></tr>
 <tr valign="top"><td>
 
-| Command | Does |
-|---|---|
-| `npm run dev` | Start (nodemon watch) |
-| `npm start` | Start the server |
-| `npm run db:generate` | Generate migrations |
-| `npm run db:push` | Push schema to DB |
+| command | does |
+| --- | --- |
+| `npm run dev` | start with nodemon watch |
+| `npm start` | start the server |
+| `npm run db:generate` | generate migrations |
+| `npm run db:push` | push schema to the db |
 
 </td><td>
 
-| Command | Does |
-|---|---|
-| `npm run dev` | Dev server |
-| `npm run build` | Production build |
-| `npm start` | Serve prod build |
-| `npm run lint` | Run ESLint |
+| command | does |
+| --- | --- |
+| `npm run dev` | dev server |
+| `npm run build` | production build |
+| `npm start` | serve the prod build |
+| `npm run lint` | run eslint |
 
 </td></tr>
 </table>
 
----
+<br>
 
-## ☁️ Deployment
+<a id="08-deploy"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s08.svg"/><img src="assets/s08.svg" alt="08 deploy"/></picture>
 
-> Frontend → **Vercel** · Server → **Render**
+```
+web       vercel   root web/
+server    render   root server/ · build npm install · start npm start
+```
 
 > [!IMPORTANT]
 > `*.vercel.app` and `*.onrender.com` are **different sites**, so the session cookie is **cross-site**. For login to persist, configure the cookie for cross-site use in `server/index.js`:
@@ -204,19 +214,21 @@ npm run dev               # ▶ http://localhost:3000
 > }
 > ```
 
-**🟣 Render (server)** — Root `server`, Build `npm install`, Start `npm start`. Provision Postgres + Redis, set the server env vars with `NODE_ENV=production` and `CORS_ORIGIN` = your exact Vercel URL, then run `npm run db:push` once.
+- **render (server)** — provision Postgres + Redis, set the server env vars with `NODE_ENV=production` and `CORS_ORIGIN` = your exact Vercel URL, then run `npm run db:push` once.
+- **vercel (web)** — set `NEXT_PUBLIC_API_URL` → `https://<your-server>.onrender.com/api/v1` and `NEXT_PUBLIC_WEBSOCKET_URL` → `https://<your-server>.onrender.com`.
+- **google oauth** — add your Vercel URL to the OAuth client's *Authorized JavaScript origins* in the Google Cloud Console.
 
-**▲ Vercel (frontend)** — Root `web`. Set `NEXT_PUBLIC_API_URL` → `https://<your-server>.onrender.com/api/v1` and `NEXT_PUBLIC_WEBSOCKET_URL` → `https://<your-server>.onrender.com`.
+<br>
 
-**🔵 Google OAuth** — add your Vercel URL to the OAuth client's *Authorized JavaScript origins* in the Google Cloud Console.
+<a id="09-license"></a>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/dark/s09.svg"/><img src="assets/s09.svg" alt="09 license"/></picture>
 
----
-
-## 📄 License
+<div align="center">
 
 Released under the **ISC License**.
 
-<div align="center">
-<br />
-<sub>Built with ⚡ real-time infrastructure and a ☕ lot of care.</sub>
+<br>
+
+<sub><code>status: building</code></sub>
+
 </div>

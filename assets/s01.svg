@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="48" viewBox="0 0 840 48" role="img" aria-label="01 overview">
+  <rect width="840" height="48" fill="#ffffff"/>
+  <g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace">
+    <text x="0" y="30" font-size="14" fill="#57606a">01</text>
+    <text x="36" y="30" font-size="18" font-weight="700" fill="#000000">overview</text>
+    <line x1="139" y1="25" x2="840" y2="25" stroke="#d0d7de" stroke-width="1"/>
+  </g>
+</svg>
