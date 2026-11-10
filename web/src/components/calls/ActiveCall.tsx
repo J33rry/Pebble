@@ -10,21 +10,11 @@ import {
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { Track } from "livekit-client";
-import {
-  PhoneOff,
-  LogOut,
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  Loader2,
-  ShieldCheck,
-  MoreVertical,
-} from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
-import clsx from "clsx";
 import { useCallStore } from "@/hooks/useCall";
-import { CallParticipantTile } from "./CallParticipantTile";
+import { CallControls } from "./CallControls";
+import { CallStage } from "./CallStage";
 
 interface ActiveCallProps {
   token: string;
@@ -173,143 +163,26 @@ function CallContent({
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex items-center justify-center relative p-4 md:p-12 overflow-hidden w-full h-full">
-        {remoteVideoTracks.length > 0 ? (
-          <div
-            className={clsx(
-              "grid gap-4 w-full h-full max-w-[1400px] mx-auto",
-              remoteVideoTracks.length === 1
-                ? "grid-cols-1"
-                : remoteVideoTracks.length <= 4
-                ? "grid-cols-2"
-                : "grid-cols-3"
-            )}
-          >
-            {remoteVideoTracks.map((trackRef) => (
-              <div key={trackRef.participant.sid} className="rounded-3xl overflow-hidden shadow-2xl border border-border bg-surface-2 relative group">
-                <CallParticipantTile
-                  trackRef={trackRef}
-                  displayName={
-                    trackRef.participant.name || trackRef.participant.identity
-                  }
-                  isMuted={!trackRef.participant.isMicrophoneEnabled}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-8 animate-in zoom-in-95 duration-500">
-            {remoteParticipants.length > 0 ? (
-              <div className="flex -space-x-4">
-                {remoteParticipants.map((p, i) => (
-                  <div
-                    key={p.sid}
-                    className="w-32 h-32 rounded-full glass-panel border-2 border-accent/40 flex items-center justify-center shadow-[0_0_40px_var(--border-glow)] relative z-10"
-                    style={{ zIndex: 10 - i }}
-                  >
-                    <span className="text-4xl font-bold text-accent font-display">
-                      {(p.name || p.identity)?.charAt(0).toUpperCase() || "?"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="absolute inset-0 bg-accent/20 rounded-full blur-3xl animate-pulse" />
-                <div className="w-32 h-32 rounded-full glass-panel border border-accent/30 flex items-center justify-center shadow-2xl relative z-10">
-                  <Loader2 className="w-10 h-10 text-accent animate-spin" />
-                </div>
-              </div>
-            )}
+      <CallStage
+        callType={callType}
+        elapsedLabel={formatTime(elapsed)}
+        isVideoOn={isVideoOn}
+        remoteParticipants={remoteParticipants}
+        remoteVideoTracks={remoteVideoTracks}
+        localVideoTracks={localVideoTracks}
+      />
 
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold text-fg tracking-tight font-display">
-                {remoteParticipants.length > 0
-                  ? callType === "audio"
-                    ? "Audio Conversation"
-                    : "Video Conversation"
-                  : "Connecting..."}
-              </h2>
-              <p className="text-sm text-accent font-mono tracking-widest uppercase font-bold">
-                {remoteParticipants.length > 0 ? formatTime(elapsed) : "Waiting for others"}
-              </p>
-            </div>
-          </div>
-        )}
 
-        {/* Local video PIP */}
-        {isVideoOn && localVideoTracks.length > 0 && (
-          <div className="absolute bottom-32 right-6 md:bottom-8 md:right-8 w-40 md:w-56 aspect-[3/4] shadow-[0_0_30px_rgba(0,0,0,0.5)] rounded-3xl overflow-hidden border border-border z-20 transition-all duration-300 hover:scale-105">
-            <CallParticipantTile
-              trackRef={localVideoTracks[0]}
-              displayName="You"
-              isLocal
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Floating Control Bar */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30">
-        <div className="glass-pill px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 md:gap-6 shadow-2xl border border-border">
-          <button
-            onClick={toggleMute}
-            className={clsx(
-              "w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all duration-300",
-              isMuted
-                ? "bg-danger/20 text-danger border border-danger/40 hover:bg-danger/30"
-                : "bg-surface-3/50 text-fg hover:bg-surface-3 hover:text-fg"
-            )}
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? <MicOff className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
-          </button>
-
-          <button
-            onClick={toggleVideo}
-            className={clsx(
-              "w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all duration-300",
-              !isVideoOn
-                ? "bg-danger/20 text-danger border border-danger/40 hover:bg-danger/30"
-                : "bg-surface-3/50 text-fg hover:bg-surface-3 hover:text-fg"
-            )}
-            title={isVideoOn ? "Turn off camera" : "Turn on camera"}
-          >
-            {!isVideoOn ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
-          </button>
-
-          {showLeaveButton && (
-            <button
-              onClick={() => exitCall(leaveCall)}
-              className="h-12 md:h-14 px-4 md:px-5 rounded-full flex items-center justify-center gap-2 bg-surface-3/50 text-fg hover:bg-surface-3 text-sm md:text-[15px] font-medium whitespace-nowrap transition-all duration-300"
-              title="Leave call. It continues for everyone else."
-            >
-              <LogOut className="w-5 h-5" />
-              Leave
-            </button>
-          )}
-
-          <button
-            onClick={() => exitCall(mainButtonLeaves ? leaveCall : endCall)}
-            className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-danger hover:bg-danger-fg hover:text-danger text-white flex items-center justify-center transition-all duration-300 shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105 mx-2"
-            title={mainButtonLabel}
-            aria-label={mainButtonLabel}
-          >
-            <PhoneOff className="w-7 h-7 md:w-8 md:h-8" />
-          </button>
-
-          <button
-            className={clsx(
-              "w-12 h-12 md:w-14 md:h-14 rounded-full items-center justify-center bg-surface-3/50 text-fg hover:bg-surface-3 transition-all duration-300",
-              showLeaveButton ? "hidden xl:flex" : "flex"
-            )}
-            title="More Options"
-          >
-            <MoreVertical className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
-        </div>
-      </div>
+      <CallControls
+        isMuted={isMuted}
+        isVideoOn={isVideoOn}
+        showLeaveButton={showLeaveButton}
+        mainButtonLabel={mainButtonLabel}
+        onToggleMute={toggleMute}
+        onToggleVideo={toggleVideo}
+        onLeave={() => exitCall(leaveCall)}
+        onMainButton={() => exitCall(mainButtonLeaves ? leaveCall : endCall)}
+      />
     </>
   );
 }

@@ -1,9 +1,9 @@
 import { AppError } from "../../lib/AppError.js";
 import * as repo from "./chats.repository.js";
+import * as participantsRepo from "./chatParticipants.repository.js";
 import { broadcastToChat, broadcastToUser } from "../../ws/connectionRegistry.js";
 import { findLatestMessagesForChats } from "../messages/messages.repository.js";
 import { findFolderIdsForChats } from "../folders/folders.repository.js";
-import { removeUserFromActiveCalls } from "../calls/calls.service.js";
 
 function mapParticipants(rawParticipants) {
     return rawParticipants.map(p => ({
@@ -33,7 +33,7 @@ export async function listChats(userId, { archived = false } = {}) {
     // A handful of flat queries for the whole list, rather than ~4 per chat.
     const [participantRows, latestByChat, unreadByChat, folderIdsByChat] =
         await Promise.all([
-            repo.findChatParticipantsForChats(chatIds),
+            participantsRepo.findChatParticipantsForChats(chatIds),
             findLatestMessagesForChats(chatIds),
             repo.findUnreadCountsForUser(userId),
             findFolderIdsForChats(userId, chatIds),
@@ -64,62 +64,6 @@ export async function listChats(userId, { archived = false } = {}) {
     });
 }
 
-const URL_RE = /https?:\/\/[^\s<>"')]+/gi;
-
-export async function listChatMedia(chatId, { kind, before, limit }) {
-    if (kind === "link") {
-        const rows = await repo.findChatLinks(chatId, { before, limit });
-        // One message can carry several links; flatten them into entries.
-        const items = [];
-        for (const row of rows) {
-            const urls = row.content?.match(URL_RE) || [];
-            for (const [i, url] of urls.entries()) {
-                let host = null;
-                try {
-                    host = new URL(url).host;
-                } catch {
-                    // Keep the raw URL even if it doesn't parse.
-                }
-                items.push({
-                    id: `${row.messageId}:${i}`,
-                    messageId: row.messageId,
-                    url,
-                    host,
-                    createdAt: row.createdAt,
-                    sender: {
-                        id: row.senderId,
-                        username: row.senderUsername,
-                        displayName: row.senderDisplayName,
-                    },
-                });
-            }
-        }
-        return items;
-    }
-
-    const rows = await repo.findChatMedia(chatId, { kind, before, limit });
-    return rows.map((r) => ({
-        id: r.mediaId,
-        messageId: r.messageId,
-        type: r.type,
-        url: r.url,
-        fileName: r.fileName,
-        mimeType: r.mimeType,
-        // bigint is not JSON-serialisable.
-        fileSize: r.fileSize == null ? null : Number(r.fileSize),
-        createdAt: r.createdAt,
-        sender: {
-            id: r.senderId,
-            username: r.senderUsername,
-            displayName: r.senderDisplayName,
-        },
-    }));
-}
-
-export async function getChatMediaCounts(chatId) {
-    return repo.countChatMediaByKind(chatId);
-}
-
 export async function updateMyChatPreferences(chatId, userId, { pinned, archived, muted }) {
     const now = new Date();
     const patch = {};
@@ -127,7 +71,7 @@ export async function updateMyChatPreferences(chatId, userId, { pinned, archived
     if (archived !== undefined) patch.archivedAt = archived ? now : null;
     if (muted !== undefined) patch.isMuted = muted;
 
-    const row = await repo.updateParticipantPreferences(chatId, userId, patch);
+    const row = await participantsRepo.updateParticipantPreferences(chatId, userId, patch);
     if (!row) throw new AppError(404, "Chat participant not found", "NOT_FOUND");
 
     broadcastToUser(userId, {
@@ -178,7 +122,7 @@ export async function getChat(chatId) {
     const chat = await repo.findChatById(chatId);
     if (!chat) throw new AppError(404, "Chat not found", "NOT_FOUND");
 
-    const rawParticipants = await repo.findChatParticipants(chatId);
+    const rawParticipants = await participantsRepo.findChatParticipants(chatId);
 
     return { ...chat, participants: mapParticipants(rawParticipants) };
 }
@@ -194,72 +138,15 @@ export async function deleteChat(chatId, userId) {
     if (!chat) throw new AppError(404, "Chat not found", "NOT_FOUND");
     if (chat.type === "dm") throw new AppError(400, "Cannot delete a DM", "INVALID_ACTION");
 
-    const requester = await repo.findParticipant(chatId, userId);
+    const requester = await participantsRepo.findParticipant(chatId, userId);
     if (!requester || requester.role !== "admin") {
         throw new AppError(403, "Admin privileges required", "NOT_ADMIN");
     }
 
-    const participantIds = await repo.getChatParticipantUserIds(chatId);
+    const participantIds = await participantsRepo.getChatParticipantUserIds(chatId);
     await repo.deleteChat(chatId);
 
     for (const pId of participantIds) {
         broadcastToUser(pId, { type: "chat:deleted", payload: { chatId } });
     }
-}
-
-export async function addParticipants(chatId, userIds) {
-    const chat = await repo.findChatById(chatId);
-    if (chat.type === "dm") {
-        throw new AppError(400, "Cannot add participants to a DM", "DM_NO_ADD");
-    }
-
-    const added = await repo.addMissingParticipants(chatId, [...new Set(userIds)]);
-    for (const participant of added) {
-        broadcastToUser(participant.userId, { type: "chat:new", payload: { chatId } });
-    }
-
-    if (added.length > 0) {
-        broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
-    }
-    return added;
-}
-
-export async function updateParticipantRole(chatId, userId, role) {
-    const updated = await repo.updateParticipantRole(chatId, userId, role);
-    if (!updated) {
-        throw new AppError(404, "Participant not found", "NOT_FOUND");
-    }
-    broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
-    return updated;
-}
-
-export async function removeParticipant(chatId, userId, requestingUserId) {
-    const chat = await repo.findChatById(chatId);
-
-    // Self-removal (leaving) is always allowed
-    if (userId !== requestingUserId) {
-        // Removing someone else requires admin
-        const requester = await repo.findParticipant(chatId, requestingUserId);
-        if (!requester || requester.role !== "admin") {
-            throw new AppError(403, "Admin privileges required", "NOT_ADMIN");
-        }
-    }
-
-    const { removed, chatDeleted } = await repo.removeMember(chatId, userId, {
-        isGroup: chat.type === "group",
-    });
-    if (!removed) {
-        throw new AppError(404, "Participant not found", "NOT_FOUND");
-    }
-
-    await removeUserFromActiveCalls(chatId, userId);
-
-    broadcastToUser(userId, { type: "chat:deleted", payload: { chatId } });
-    if (!chatDeleted) {
-        broadcastToChat(chatId, { type: "chat:updated", payload: { chatId } });
-    }
-}
-
-export async function getChatParticipantUserIds(chatId) {
-    return repo.getChatParticipantUserIds(chatId);
 }

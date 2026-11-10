@@ -1,10 +1,11 @@
 import { AppError } from "../../lib/AppError.js";
 import * as repo from "./messages.repository.js";
+import * as interactionsRepo from "./messageInteractions.repository.js";
 import { findMediaById } from "../media/media.repository.js";
 import {
     findChatParticipants,
     advanceLastReadAt,
-} from "../chats/chats.repository.js";
+} from "../chats/chatParticipants.repository.js";
 import { broadcastToUser } from "../../ws/connectionRegistry.js";
 
 // Outbound-only, in addition to the normal message:new fan-out, so a client
@@ -40,7 +41,7 @@ async function syncMentions(messageId, chatId, content) {
             .map((p) => p.userId);
     }
 
-    await repo.replaceMentions(messageId, userIds);
+    await interactionsRepo.replaceMentions(messageId, userIds);
     return userIds;
 }
 
@@ -114,22 +115,22 @@ export async function deleteMessage(chatId, messageId, userId) {
 
     // Soft delete nulls the content, so drop the mention rows with it —
     // otherwise a deleted message keeps contributing to mention badges.
-    await repo.replaceMentions(messageId, []);
+    await interactionsRepo.replaceMentions(messageId, []);
     return repo.softDeleteMessage(messageId);
 }
 
 export async function addReaction(chatId, messageId, userId, reaction) {
     await getMessageInChat(chatId, messageId);
-    return repo.upsertReaction(messageId, userId, reaction);
+    return interactionsRepo.upsertReaction(messageId, userId, reaction);
 }
 
 export async function removeReaction(chatId, messageId, userId, reaction) {
     await getMessageInChat(chatId, messageId);
-    await repo.removeReaction(messageId, userId, reaction);
+    await interactionsRepo.removeReaction(messageId, userId, reaction);
 }
 
 export async function markRead(chatId, messageIds, userId) {
-    await repo.markRead(chatId, messageIds, userId);
+    await interactionsRepo.markRead(chatId, messageIds, userId);
     // Advance the unread watermark in the same pass, so the sidebar badge
     // clears without the client needing a second call.
     await advanceLastReadAt(chatId, userId);

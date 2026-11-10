@@ -1,9 +1,7 @@
 import { broadcastToUser } from "../connectionRegistry.js";
 import { findUserContacts } from "../../modules/contacts/contacts.repository.js";
-import {
-    findUserChats,
-    findChatParticipantsForChats,
-} from "../../modules/chats/chats.repository.js";
+import { findUserChats } from "../../modules/chats/chats.repository.js";
+import { findChatParticipantsForChats } from "../../modules/chats/chatParticipants.repository.js";
 
 // Everyone allowed to see this user's presence: accepted contacts and the
 // other participants of their chats.

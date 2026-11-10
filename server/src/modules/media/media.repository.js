@@ -1,5 +1,5 @@
 import { db } from "../../db/index.js";
-import { media, messages } from "../../db/schema/index.js";
+import { media } from "../../db/schema/index.js";
 import { eq, sql } from "drizzle-orm";
 
 export async function createMedia(data) {

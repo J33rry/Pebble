@@ -6,7 +6,6 @@ import {
     timestamp,
     index,
 } from "drizzle-orm/pg-core";
-// import { sql } from "drizzle-orm";
 import { users } from "./users.js";
 
 export const chats = pgTable(

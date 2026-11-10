@@ -1,5 +1,7 @@
 import { asyncHandler } from "../../lib/asyncHandler.js";
 import * as chatsService from "./chats.service.js";
+import * as chatMembersService from "./chatMembers.service.js";
+import * as chatMediaService from "./chatMedia.service.js";
 import * as v from "./chats.validation.js";
 
 export const listChats = asyncHandler(async (req, res) => {
@@ -10,7 +12,7 @@ export const listChats = asyncHandler(async (req, res) => {
 
 export const listChatMedia = asyncHandler(async (req, res) => {
     const { kind, before, limit } = v.chatMediaQuerySchema.parse(req.query);
-    const items = await chatsService.listChatMedia(req.params.chatId, {
+    const items = await chatMediaService.listChatMedia(req.params.chatId, {
         kind,
         before,
         limit,
@@ -19,7 +21,7 @@ export const listChatMedia = asyncHandler(async (req, res) => {
 });
 
 export const getChatMediaCounts = asyncHandler(async (req, res) => {
-    const counts = await chatsService.getChatMediaCounts(req.params.chatId);
+    const counts = await chatMediaService.getChatMediaCounts(req.params.chatId);
     res.json({ counts });
 });
 
@@ -57,7 +59,7 @@ export const deleteChat = asyncHandler(async (req, res) => {
 
 export const addParticipants = asyncHandler(async (req, res) => {
     const { userIds } = v.addParticipantsSchema.parse(req.body);
-    const participants = await chatsService.addParticipants(
+    const participants = await chatMembersService.addParticipants(
         req.params.chatId,
         userIds,
     );
@@ -66,7 +68,7 @@ export const addParticipants = asyncHandler(async (req, res) => {
 
 export const updateParticipant = asyncHandler(async (req, res) => {
     const { role } = v.updateParticipantSchema.parse(req.body);
-    const participant = await chatsService.updateParticipantRole(
+    const participant = await chatMembersService.updateParticipantRole(
         req.params.chatId,
         req.params.userId,
         role,
@@ -75,7 +77,7 @@ export const updateParticipant = asyncHandler(async (req, res) => {
 });
 
 export const removeParticipant = asyncHandler(async (req, res) => {
-    await chatsService.removeParticipant(
+    await chatMembersService.removeParticipant(
         req.params.chatId,
         req.params.userId,
         req.user.id,

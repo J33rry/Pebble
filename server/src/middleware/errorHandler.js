@@ -15,7 +15,7 @@ const CLIENT_DB_ERRORS = {
 };
 
 // Hook point: add Sentry.captureException, Datadog, structured logger, etc.
-export function errorHandler(err, req, res, _next) {
+export function errorHandler(err, _req, res, _next) {
     if (err instanceof AppError) {
         return res.status(err.statusCode).json({
             error: { code: err.code, message: err.message },

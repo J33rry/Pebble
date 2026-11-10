@@ -14,15 +14,6 @@ export async function findUserFolders(userId) {
         .orderBy(asc(chatFolders.position), asc(chatFolders.createdAt));
 }
 
-export async function findFolderById(folderId) {
-    const [folder] = await db
-        .select()
-        .from(chatFolders)
-        .where(eq(chatFolders.id, folderId))
-        .limit(1);
-    return folder;
-}
-
 /** Inserts the folder unless the user already has `limit`; returns null when full. */
 export async function createFolderWithinLimit(userId, { name, icon, position }, limit) {
     return db.transaction(async (tx) => {

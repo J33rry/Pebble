@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../lib/asyncHandler.js";
 import * as messagesService from "./messages.service.js";
 import * as v from "./messages.validation.js";
+import { toMessageResponse } from "./messages.mapper.js";
 import { broadcastToChat } from "../../ws/connectionRegistry.js";
 
 export const getMessages = asyncHandler(async (req, res) => {
@@ -9,35 +10,8 @@ export const getMessages = asyncHandler(async (req, res) => {
         req.params.chatId,
         pagination,
     );
-    
-    // Map flattened db fields to nested objects expected by frontend
-    const messages = rawMessages.map(msg => {
-        const mapped = { ...msg };
-        
-        mapped.sender = {
-            id: msg.senderId,
-            username: msg.senderUsername,
-            displayName: msg.senderDisplayName,
-            avatarUrl: msg.senderAvatarUrl,
-        };
-        delete mapped.senderUsername;
-        delete mapped.senderDisplayName;
-        delete mapped.senderAvatarUrl;
-        
-        if (msg.mediaUrl) {
-            mapped.media = {
-                id: msg.mediaId,
-                url: msg.mediaUrl,
-                filename: msg.mediaFileName,
-                mimeType: msg.mediaMimeType,
-            };
-        }
-        delete mapped.mediaUrl;
-        delete mapped.mediaFileName;
-        delete mapped.mediaMimeType;
-        
-        return mapped;
-    });
+
+    const messages = rawMessages.map(toMessageResponse);
 
     res.json({ messages });
 });
@@ -50,28 +24,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
         body,
     );
 
-    const message = { ...rawMessage };
-    message.sender = {
-        id: message.senderId,
-        username: message.senderUsername,
-        displayName: message.senderDisplayName,
-        avatarUrl: message.senderAvatarUrl,
-    };
-    delete message.senderUsername;
-    delete message.senderDisplayName;
-    delete message.senderAvatarUrl;
-    
-    if (message.mediaUrl) {
-        message.media = {
-            id: message.mediaId,
-            url: message.mediaUrl,
-            filename: message.mediaFileName,
-            mimeType: message.mediaMimeType,
-        };
-    }
-    delete message.mediaUrl;
-    delete message.mediaFileName;
-    delete message.mediaMimeType;
+    const message = toMessageResponse(rawMessage);
 
     if (created) {
         broadcastToChat(req.params.chatId, {

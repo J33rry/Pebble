@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { broadcastToUser } from "../connectionRegistry.js";
 import { findCallById } from "../../modules/calls/calls.repository.js";
-import { findChatById, findParticipant } from "../../modules/chats/chats.repository.js";
+import { findChatById } from "../../modules/chats/chats.repository.js";
+import { findParticipant } from "../../modules/chats/chatParticipants.repository.js";
 
 const callEventSchema = z.object({ callId: z.string().uuid() });
 

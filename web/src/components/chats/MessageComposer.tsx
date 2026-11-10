@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { messagesApi } from "@/lib/api/messages";
-import { mediaApi } from "@/lib/api/media";
-import { chatsApi, ChatParticipant } from "@/lib/api/chats";
-import { useAuth } from "@/hooks/useAuth";
-import { Avatar } from "@/components/ui/Avatar";
-import { Paperclip, Send, Loader2, X, File as FileIcon, Check, Smile, Mic, Square } from "lucide-react";
-import { formatDuration } from "@/lib/utils/time";
-import { useTyping } from "@/hooks/useTyping";
-import { useMessageActions } from "@/hooks/useMessageActions";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import clsx from "clsx";
-import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
+import { Check, Loader2, Mic, Paperclip, Send, Smile, Square } from "lucide-react";
+import { useComposerAttachment } from "@/hooks/useComposerAttachment";
+import { useMentionAutocomplete } from "@/hooks/useMentionAutocomplete";
+import { useMessageActions } from "@/hooks/useMessageActions";
+import { useTyping } from "@/hooks/useTyping";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { mediaApi } from "@/lib/api/media";
+import { messagesApi } from "@/lib/api/messages";
+import { formatDuration } from "@/lib/utils/time";
+import { AttachmentPreview } from "./composer/AttachmentPreview";
+import { EditBanner, ReplyBanner } from "./composer/ComposerBanners";
+import { MentionPopover } from "./composer/MentionPopover";
 
 interface MessageComposerProps {
   chatId: string;
@@ -20,49 +23,28 @@ interface MessageComposerProps {
 
 export function MessageComposer({ chatId }: MessageComposerProps) {
   const [content, setContent] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-
-  // Mention autocomplete. `mentionAnchor` is the index of the '@' being typed.
-  const [mentionAnchor, setMentionAnchor] = useState<number | null>(null);
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionIndex, setMentionIndex] = useState(0);
 
   const queryClient = useQueryClient();
   const { sendTypingStart } = useTyping(chatId);
   const { editingMessage, replyingToMessage, clearActions } = useMessageActions();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { user: currentUser } = useAuth();
 
-  // Already warm — ChatMain fetches this on the same key.
-  const { data: chatData } = useQuery({
-    queryKey: ["chats", chatId],
-    queryFn: () => chatsApi.getChatDetails(chatId),
-  });
-
-  // Only this chat's participants can be mentioned, matching the server.
-  const mentionCandidates: ChatParticipant[] =
-    mentionAnchor === null
-      ? []
-      : (chatData?.chat?.participants || [])
-          .filter((p) => p.userId !== currentUser?.id)
-          .filter((p) => {
-            const q = mentionQuery.toLowerCase();
-            if (!q) return true;
-            return (
-              (p.user?.username || "").toLowerCase().startsWith(q) ||
-              (p.user?.displayName || "").toLowerCase().includes(q)
-            );
-          })
-          .slice(0, 6);
+  const {
+    selectedFile,
+    setSelectedFile,
+    previewUrl,
+    isDragging,
+    fileInputRef,
+    resetFile,
+    handleFileSelect,
+    dragHandlers,
+  } = useComposerAttachment();
+  const { recordingSeconds, isRecording, toggleRecording } = useVoiceRecorder(setSelectedFile);
+  const mentions = useMentionAutocomplete({ chatId, content, setContent, textareaRef });
 
   useEffect(() => {
     if (editingMessage) {
@@ -71,7 +53,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     } else {
       setContent("");
     }
-  }, [editingMessage]);
+  }, [editingMessage, setSelectedFile]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -83,52 +65,8 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (selectedFile) {
-      if (selectedFile.type.startsWith("image/") || selectedFile.type.startsWith("video/")) {
-        const url = URL.createObjectURL(selectedFile);
-        setPreviewUrl(url);
-        return () => URL.revokeObjectURL(url);
-      } else {
-        setPreviewUrl(null);
-      }
-    } else {
-      setPreviewUrl(null);
-    }
-  }, [selectedFile]);
-
   const clearFile = () => {
-    if (isUploading) return;
-    setSelectedFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-  };
-
-  // Drag and Drop support
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
-    }
+    if (!isUploading) resetFile();
   };
 
   // Kept across a failed send: if the request actually reached the server and
@@ -162,12 +100,11 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     onSuccess: () => {
       sendAttemptRef.current = null;
       setContent("");
-      setSelectedFile(null);
+      resetFile();
       setIsUploading(false);
       setUploadProgress(0);
       setShowEmojiPicker(false);
       clearActions();
-      if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
       queryClient.invalidateQueries({ queryKey: ["chats"] });
     },
@@ -233,30 +170,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // The mention popover must claim these keys BEFORE the Enter-to-send
     // branch below, or picking a suggestion would send a half-typed mention.
-    if (mentionCandidates.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setMentionIndex((i) => (i + 1) % mentionCandidates.length);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setMentionIndex(
-          (i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length,
-        );
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        applyMention(mentionCandidates[mentionIndex]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setMentionAnchor(null);
-        return;
-      }
-    }
+    if (mentions.handleMentionKey(e)) return;
 
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -268,37 +182,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     const value = e.target.value;
     setContent(value);
     sendTypingStart();
-
-    // Detect an in-progress @mention immediately left of the caret.
-    const caret = e.target.selectionStart ?? value.length;
-    const match = /(?:^|[^\w@])@([a-zA-Z0-9_]*)$/.exec(value.slice(0, caret));
-    if (match) {
-      setMentionAnchor(caret - match[1].length - 1);
-      setMentionQuery(match[1]);
-      setMentionIndex(0);
-    } else {
-      setMentionAnchor(null);
-    }
-  };
-
-  const applyMention = (p: ChatParticipant) => {
-    if (mentionAnchor === null) return;
-    const username = p.user?.username;
-    if (!username) return;
-
-    const caret = textareaRef.current?.selectionStart ?? content.length;
-    const next =
-      content.slice(0, mentionAnchor) + `@${username} ` + content.slice(caret);
-
-    setContent(next);
-    setMentionAnchor(null);
-
-    // Put the caret just after the inserted mention.
-    const pos = mentionAnchor + username.length + 2;
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(pos, pos);
-    });
+    mentions.detectMention(value, e.target.selectionStart ?? value.length);
   };
 
   const handleEmojiSelect = (emojiData: EmojiClickData) => {
@@ -306,52 +190,11 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
     if (textareaRef.current) textareaRef.current.focus();
   };
 
-  // Voice messages: record with MediaRecorder, then hand the clip to the same
-  // attachment path as any other file so it uploads and sends as audio.
-  const isRecording = recordingSeconds !== null;
-
-  useEffect(() => {
-    if (!isRecording) return;
-    const t = setInterval(() => setRecordingSeconds((s) => (s ?? 0) + 1), 1000);
-    return () => clearInterval(t);
-  }, [isRecording]);
-
-  useEffect(() => () => recorderRef.current?.stop(), []);
-
-  const toggleRecording = async () => {
-    if (recorderRef.current) {
-      recorderRef.current.stop();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        recorderRef.current = null;
-        setRecordingSeconds(null);
-        if (!chunks.length) return;
-        const type = recorder.mimeType || "audio/webm";
-        const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
-        setSelectedFile(new File(chunks, `voice-message.${ext}`, { type }));
-      };
-      recorderRef.current = recorder;
-      recorder.start();
-      setRecordingSeconds(0);
-    } catch {
-      alert("Microphone access is needed to record a voice message.");
-    }
-  };
-
   return (
     <div
       className="px-4 md:px-6 pb-4 pt-2 shrink-0 flex flex-col relative z-20"
       ref={containerRef}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      {...dragHandlers}
     >
       {/* Drag & Drop Overlay */}
       {isDragging && (
@@ -379,83 +222,28 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
           "flex flex-col rounded-2xl bg-surface-2 transition-shadow w-full relative overflow-visible",
           editingMessage || replyingToMessage
             ? "ring-2 ring-accent/50"
-            : "focus-within:ring-2 focus-within:ring-accent/40"
+            : "focus-within:ring-2 focus-within:ring-accent/40",
         )}
       >
-        {/* Reply Active Banner */}
-        {replyingToMessage && (
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-            <div className="flex flex-col min-w-0 pr-4 border-l-[3px] border-accent pl-3">
-              <span className="text-xs font-semibold text-accent">
-                Replying to {replyingToMessage.sender?.displayName || "User"}
-              </span>
-              <span className="text-xs text-muted truncate mt-0.5">
-                {replyingToMessage.content || "Media attachment"}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => clearActions()}
-              className="p-1.5 rounded-full text-muted hover:text-fg hover:bg-surface-3 transition-colors shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        {replyingToMessage && <ReplyBanner message={replyingToMessage} onCancel={clearActions} />}
 
-        {/* Edit Active Banner */}
         {editingMessage && (
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-            <div className="flex flex-col min-w-0 border-l-[3px] border-accent pl-3">
-              <span className="text-xs font-semibold text-accent">
-                Editing Message
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                clearActions();
-                setContent("");
-              }}
-              className="p-1.5 rounded-full text-muted hover:text-fg hover:bg-surface-3 transition-colors shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <EditBanner
+            onCancel={() => {
+              clearActions();
+              setContent("");
+            }}
+          />
         )}
 
-        {/* Selected File Preview Box */}
         {selectedFile && !editingMessage && (
-          <div className="relative self-start ml-4 mt-3 mb-1 rounded-2xl overflow-hidden bg-surface border border-border inline-flex items-center justify-center">
-            {previewUrl ? (
-              <img src={previewUrl} alt="Preview" className="w-24 h-24 object-cover" />
-            ) : (
-              <div className="p-4 flex flex-col items-center justify-center w-24 h-24 text-muted">
-                <FileIcon className="w-7 h-7 mb-2 text-accent" />
-                <span className="text-[11px] max-w-[80px] truncate text-center">
-                  {selectedFile.name}
-                </span>
-              </div>
-            )}
-
-            {!isUploading && (
-              <button
-                type="button"
-                onClick={clearFile}
-                className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md hover:bg-danger rounded-full text-white transition-all shadow-md"
-                title="Remove file"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            {isUploading && (
-              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white">
-                <Loader2 className="w-6 h-6 animate-spin text-accent" />
-                <span className="text-[10px] font-bold font-mono text-accent">{uploadProgress}%</span>
-              </div>
-            )}
-          </div>
+          <AttachmentPreview
+            file={selectedFile}
+            previewUrl={previewUrl}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            onRemove={clearFile}
+          />
         )}
 
         <div className="flex items-end gap-1 py-1.5 px-2">
@@ -489,42 +277,13 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
             <Smile className="w-6 h-6" strokeWidth={1.8} />
           </button>
 
-          {mentionCandidates.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-2 w-64 py-1 rounded-2xl bg-surface border border-border shadow-[var(--shadow-lg)] z-40 overflow-hidden">
-              {mentionCandidates.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  // onMouseDown, not onClick: onClick fires after the textarea
-                  // blurs and the popover has already closed.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    applyMention(p);
-                  }}
-                  onMouseEnter={() => setMentionIndex(i)}
-                  className={clsx(
-                    "w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors",
-                    i === mentionIndex
-                      ? "bg-surface-2 text-fg"
-                      : "text-muted hover:bg-surface-2",
-                  )}
-                >
-                  <Avatar
-                    src={p.user?.avatarUrl}
-                    name={p.user?.displayName || p.user?.username}
-                    size="sm"
-                  />
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-xs font-semibold text-fg truncate">
-                      {p.user?.displayName}
-                    </span>
-                    <span className="block text-[10px] text-muted truncate">
-                      @{p.user?.username}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
+          {mentions.candidates.length > 0 && (
+            <MentionPopover
+              candidates={mentions.candidates}
+              activeIndex={mentions.activeIndex}
+              onHover={mentions.setActiveIndex}
+              onSelect={mentions.applyMention}
+            />
           )}
 
           <textarea
@@ -533,11 +292,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             placeholder={
-              editingMessage
-                ? "Edit message..."
-                : selectedFile
-                ? "Add a caption..."
-                : "Your message"
+              editingMessage ? "Edit message..." : selectedFile ? "Add a caption..." : "Your message"
             }
             className="flex-1 bg-transparent border-0 text-fg placeholder:text-muted resize-none max-h-32 min-h-[44px] focus:outline-none py-2.5 px-2 text-[16px] leading-relaxed"
             rows={1}
@@ -548,7 +303,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
           {isRecording ? (
             <span className="self-center flex items-center gap-2 px-2 text-sm font-medium text-danger tabular-nums">
               <span className="h-2 w-2 rounded-full bg-danger animate-pulse" />
-              {formatDuration(recordingSeconds)}
+              {formatDuration(recordingSeconds ?? 0)}
             </span>
           ) : null}
 
@@ -559,11 +314,15 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
               disabled={isUploading || (!!selectedFile && !isRecording)}
               className={clsx(
                 "p-2.5 rounded-xl transition-colors disabled:opacity-40",
-                isRecording ? "text-danger hover:bg-surface-3" : "text-accent hover:bg-surface-3"
+                isRecording ? "text-danger hover:bg-surface-3" : "text-accent hover:bg-surface-3",
               )}
               title={isRecording ? "Stop recording" : "Record voice message"}
             >
-              {isRecording ? <Square className="w-6 h-6 fill-current" /> : <Mic className="w-6 h-6" strokeWidth={1.8} />}
+              {isRecording ? (
+                <Square className="w-6 h-6 fill-current" />
+              ) : (
+                <Mic className="w-6 h-6" strokeWidth={1.8} />
+              )}
             </button>
           )}
 
@@ -579,9 +338,7 @@ export function MessageComposer({ chatId }: MessageComposerProps) {
             className="p-2.5 rounded-xl text-accent hover:bg-surface-3 transition-colors disabled:text-faint disabled:hover:bg-transparent"
             title="Send"
           >
-            {sendMessageMutation.isPending ||
-            editMessageMutation.isPending ||
-            isUploading ? (
+            {sendMessageMutation.isPending || editMessageMutation.isPending || isUploading ? (
               <Loader2 className="w-6 h-6 animate-spin" />
             ) : editingMessage ? (
               <Check className="w-6 h-6" />

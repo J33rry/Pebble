@@ -1,6 +1,8 @@
 import { asyncHandler } from "../../lib/asyncHandler.js";
 import { disconnectUserSockets } from "../../ws/connectionRegistry.js";
 import * as authService from "./auth.service.js";
+import * as googleService from "./google.service.js";
+import * as passwordService from "./password.service.js";
 import * as v from "./auth.validation.js";
 
 const regenerateSession = (req) =>
@@ -41,7 +43,7 @@ export const loginPassword = asyncHandler(async (req, res) => {
 
 export const loginGoogle = asyncHandler(async (req, res) => {
     const { idToken } = v.loginGoogleSchema.parse(req.body);
-    const result = await authService.loginWithGoogle(idToken);
+    const result = await googleService.loginWithGoogle(idToken);
     await startSession(req, result);
     res.json({ user: result.user });
 });
@@ -50,7 +52,7 @@ export const loginGoogle = asyncHandler(async (req, res) => {
 
 export const changePassword = asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = v.passwordChangeSchema.parse(req.body);
-    const sessionVersion = await authService.changePassword(
+    const sessionVersion = await passwordService.changePassword(
         req.user.id,
         currentPassword,
         newPassword,
@@ -68,14 +70,14 @@ export const changePassword = asyncHandler(async (req, res) => {
 
 export const forgotPassword = asyncHandler(async (req, res) => {
     const { email } = v.forgotPasswordSchema.parse(req.body);
-    await authService.forgotPassword(email);
+    await passwordService.forgotPassword(email);
     // Always 200 to prevent email enumeration
     res.json({ message: "If that email exists, a reset link has been sent" });
 });
 
 export const resetPassword = asyncHandler(async (req, res) => {
     const { resetToken, newPassword } = v.resetPasswordSchema.parse(req.body);
-    await authService.resetPassword(resetToken, newPassword);
+    await passwordService.resetPassword(resetToken, newPassword);
     res.json({ message: "Password reset successful" });
 });
 

@@ -19,7 +19,6 @@
         "argon2": "^0.45.1",
         "cloudinary": "^2.10.0",
         "connect-redis": "^10.0.0",
-        "cookie-parser": "^1.4.7",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
         "drizzle-orm": "^0.45.2",

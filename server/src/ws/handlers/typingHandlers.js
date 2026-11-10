@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { broadcastToChat } from "../connectionRegistry.js";
-import { findParticipant } from "../../modules/chats/chats.repository.js";
+import { findParticipant } from "../../modules/chats/chatParticipants.repository.js";
 
 const typingSchema = z.object({ chatId: z.string().uuid() });
 

@@ -1,5 +1,5 @@
 import { db } from "../../db/index.js";
-import { calls, callParticipants, users } from "../../db/schema/index.js";
+import { calls, callParticipants, chatParticipants, chats, users } from "../../db/schema/index.js";
 import { eq, and, isNull, desc, sql } from "drizzle-orm";
 
 export async function createCall(data) {
@@ -117,11 +117,7 @@ export async function findChatCallHistory(chatId) {
 }
 
 export async function findUserCallHistory(userId) {
-    // A user's call history is all calls where the user was a participant, OR the call was in a chat the user is part of.
-    // For simplicity, we can fetch all calls where the user is a chat participant.
-    const { chatParticipants } = await import("../../db/schema/chatParticipants.js");
-    const { chats } = await import("../../db/schema/chats.js");
-    
+    // Every call in any chat the user belongs to.
     return db
         .select({
             id: calls.id,

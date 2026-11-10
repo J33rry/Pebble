@@ -3,7 +3,8 @@ import { AppError } from "../../lib/AppError.js";
 import { createLiveKitToken, roomService } from "../../lib/livekit.js";
 import { env } from "../../config/env.js";
 import * as repo from "./calls.repository.js";
-import { findChatById, findParticipant } from "../chats/chats.repository.js";
+import { findChatById } from "../chats/chats.repository.js";
+import { findParticipant } from "../chats/chatParticipants.repository.js";
 
 export async function initiateCall(chatId, initiatorId, initiatorName, type) {
     const roomName = `call-${crypto.randomUUID()}`;

@@ -1,4 +1,4 @@
-import { getChatParticipantUserIds } from "../modules/chats/chats.repository.js";
+import { getChatParticipantUserIds } from "../modules/chats/chatParticipants.repository.js";
 
 // Delivery runs through Socket.IO rooms: every socket joins `user:<userId>`,
 // so a user with several devices is addressed by one room name.
@@ -14,7 +14,7 @@ import { getChatParticipantUserIds } from "../modules/chats/chats.repository.js"
 let io = null;
 const userSockets = new Map();
 
-export const userRoom = (userId) => `user:${userId}`;
+const userRoom = (userId) => `user:${userId}`;
 
 export function setIoServer(ioServer) {
     io = ioServer;
@@ -35,7 +35,7 @@ export function removeConnection(userId, socket) {
     if (socketIds.size === 0) userSockets.delete(userId);
 }
 
-export function getConnections(userId) {
+function getConnections(userId) {
     return userSockets.get(userId) || new Set();
 }
 

@@ -52,5 +52,3 @@ export function isOwnMediaUrl(value) {
         /\/(image|video|raw)\/upload\/(v\d+\/)?chat_media\//.test(url.pathname)
     );
 }
-
-export default cloudinary;

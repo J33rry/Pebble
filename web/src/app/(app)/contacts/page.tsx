@@ -1,39 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  Search,
-  UserPlus,
-  Check,
-  X,
-  ChevronRight,
-  Star,
-  MessageCircle,
-  MoreHorizontal,
-  Phone,
-  Video,
-  UserMinus,
-  Clock,
-} from "lucide-react";
-import { contactsApi, Contact } from "@/lib/api/contacts";
-import { usersApi, User } from "@/lib/api/users";
+import { X } from "lucide-react";
+import { Avatar } from "@/components/ui/Avatar";
+import { ContactRequests } from "@/components/contacts/ContactRequests";
+import { ContactRow } from "@/components/contacts/ContactRow";
+import { ContactSearch } from "@/components/contacts/ContactSearch";
+import { contactsApi } from "@/lib/api/contacts";
 import { useAuth } from "@/hooks/useAuth";
 import { usePresence } from "@/hooks/usePresence";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useOpenDm } from "@/hooks/useOpenDm";
-import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { formatLastSeen } from "@/lib/utils/presence";
 
 type ContactFilter = "all" | "online" | "favorite";
-
-const primaryBtn =
-  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-[15px] font-medium text-accent-fg hover:bg-accent-hover transition-colors disabled:opacity-60";
-const softBtn =
-  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-surface-2 px-4 py-2 text-[15px] font-medium text-accent hover:bg-surface-3 transition-colors disabled:opacity-60";
 
 export default function ContactsPage() {
   const queryClient = useQueryClient();
@@ -43,10 +27,6 @@ export default function ContactsPage() {
   const favorites = useFavorites();
   const { openDm } = useOpenDm();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showAllRequests, setShowAllRequests] = useState(false);
   const [filter, setFilter] = useState<ContactFilter>("all");
   const [menuId, setMenuId] = useState<string | null>(null);
 
@@ -55,42 +35,6 @@ export default function ContactsPage() {
     queryFn: () => contactsApi.getContacts(),
   });
   const contacts = contactsData?.contacts;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        setIsSearching(true);
-        usersApi
-          .search(searchQuery.replace(/^@/, ""))
-          .then((results) => setSearchResults(results.users || []))
-          .catch(console.error)
-          .finally(() => setIsSearching(false));
-      } else {
-        setSearchResults([]);
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const sendRequestMutation = useMutation({
-    mutationFn: (userId: string) => contactsApi.sendRequest(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast("Contact request sent!", "success");
-    },
-    onError: (error: Error) => {
-      toast(error.message || "Failed to send contact request", "error");
-    },
-  });
-
-  const respondRequestMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "accepted" | "rejected" }) =>
-      contactsApi.respondToRequest(id, status),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast(`Contact request ${variables.status}`, "info");
-    },
-  });
 
   const deleteContactMutation = useMutation({
     mutationFn: (id: string) => contactsApi.deleteContact(id),
@@ -116,14 +60,6 @@ export default function ContactsPage() {
   const visibleContacts =
     filter === "online" ? onlineContacts : filter === "favorite" ? favoriteContacts : acceptedContacts;
 
-  const visibleRequests = showAllRequests ? incomingRequests : incomingRequests.slice(0, 3);
-
-  const relationFor = (userId: string) => {
-    if (userId === currentUser?.id) return "self";
-    const existing = contacts?.find((c) => c.contactId === userId || c.userId === userId);
-    return existing?.status === "accepted" ? "connected" : existing?.status === "pending" ? "pending" : "none";
-  };
-
   return (
     <div className="flex-1 overflow-y-auto bg-bg select-none">
       <div className="mx-auto max-w-[1400px] p-5 sm:p-8">
@@ -133,80 +69,8 @@ export default function ContactsPage() {
             <p className="text-lg text-muted">Connect with your team, collaborators, and others on Pebble.</p>
           </header>
 
-          {/* Username search */}
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 rounded-2xl bg-surface-2 px-5 py-3.5 text-muted focus-within:ring-2 focus-within:ring-accent/40 transition-shadow">
-              <Search className="h-6 w-6 shrink-0" strokeWidth={1.8} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by username (e.g., @jasminepark)"
-                className="w-full bg-transparent text-[17px] text-fg placeholder:text-muted focus:outline-none"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="p-1 rounded-lg hover:text-fg" title="Clear search">
-                  <X className="h-5 w-5" />
-                </button>
-              )}
-            </label>
+          <ContactSearch contacts={contacts} />
 
-            {searchQuery.trim() && (
-              <div className="rounded-3xl border border-border bg-surface p-2 shadow-[var(--shadow-md)]">
-                {isSearching ? (
-                  <div className="space-y-3 p-3">
-                    {[1, 2].map((i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="w-12 h-12 rounded-2xl shrink-0" />
-                        <div className="space-y-1.5 flex-1">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-20" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : searchResults.length === 0 ? (
-                  <p className="p-5 text-center text-sm text-muted">
-                    No users found matching &quot;{searchQuery}&quot;
-                  </p>
-                ) : (
-                  <ul>
-                    {searchResults.map((user) => {
-                      const relation = relationFor(user.id);
-                      return (
-                        <li key={user.id} className="flex items-center gap-3.5 rounded-2xl p-3 hover:bg-surface-2/60">
-                          <Avatar src={user.avatarUrl} name={user.displayName} size="lg" showPresence isOnline={isOnline(user.id)} />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-fg truncate">{user.displayName}</p>
-                            <p className="text-sm text-muted truncate">@{user.username}</p>
-                          </div>
-                          {relation === "self" ? (
-                            <span className="text-sm text-muted">You</span>
-                          ) : relation === "connected" ? (
-                            <button onClick={() => openDm(user.id)} className={softBtn}>
-                              <MessageCircle className="h-4 w-4" /> Message
-                            </button>
-                          ) : relation === "pending" ? (
-                            <span className="inline-flex items-center gap-1.5 text-sm text-muted">
-                              <Clock className="h-4 w-4" /> Pending
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => sendRequestMutation.mutate(user.id)}
-                              disabled={sendRequestMutation.isPending}
-                              className={softBtn}
-                            >
-                              <UserPlus className="h-4 w-4" /> Connect
-                            </button>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
 
           {isLoading ? (
             <div className="space-y-4">
@@ -215,65 +79,8 @@ export default function ContactsPage() {
             </div>
           ) : (
             <>
-              {/* Incoming requests */}
-              {incomingRequests.length > 0 && (
-                <section className="rounded-3xl bg-surface-2/60 p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="flex items-center gap-2.5 text-[24px] font-semibold text-fg tracking-tight">
-                        Contact requests
-                        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-danger px-1.5 text-[13px] font-semibold text-danger-fg">
-                          {incomingRequests.length}
-                        </span>
-                      </h2>
-                      <p className="text-muted">People who want to connect with you.</p>
-                    </div>
-                    {incomingRequests.length > 3 && (
-                      <button
-                        onClick={() => setShowAllRequests((v) => !v)}
-                        className="flex items-center gap-1 text-[15px] text-accent hover:text-accent-hover whitespace-nowrap"
-                      >
-                        {showAllRequests ? "Show fewer" : "View all requests"}
-                        <ChevronRight className={clsx("h-4 w-4 transition-transform", showAllRequests && "rotate-90")} />
-                      </button>
-                    )}
-                  </div>
+              {incomingRequests.length > 0 && <ContactRequests incomingRequests={incomingRequests} />}
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                    {visibleRequests.map((contact) => {
-                      const u = contact.contactUser;
-                      return (
-                        <div key={contact.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-sm)]">
-                          <div className="flex gap-3.5">
-                            <Avatar src={u?.avatarUrl} name={u?.displayName} size="xl" className="[&>div]:!w-[72px] [&>div]:!h-[72px]" />
-                            <div className="min-w-0">
-                              <p className="text-[17px] font-semibold text-fg truncate">{u?.displayName}</p>
-                              <p className="text-sm text-muted truncate">@{u?.username}</p>
-                              {u?.bio && <p className="mt-1.5 text-sm text-muted line-clamp-2">{u.bio}</p>}
-                            </div>
-                          </div>
-                          <div className="mt-4 grid grid-cols-2 gap-2">
-                            <button
-                              onClick={() => respondRequestMutation.mutate({ id: contact.id, status: "accepted" })}
-                              disabled={respondRequestMutation.isPending}
-                              className={primaryBtn}
-                            >
-                              <Check className="h-4 w-4" /> Accept
-                            </button>
-                            <button
-                              onClick={() => respondRequestMutation.mutate({ id: contact.id, status: "rejected" })}
-                              disabled={respondRequestMutation.isPending}
-                              className={clsx(softBtn, "!text-fg")}
-                            >
-                              <X className="h-4 w-4" /> Decline
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
 
               {/* Your contacts */}
               <section>
@@ -363,94 +170,5 @@ export default function ContactsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ContactRow({
-  contact,
-  online,
-  lastSeen,
-  favorite,
-  onToggleFavorite,
-  menuOpen,
-  onMenu,
-  onMessage,
-  onCall,
-  onRemove,
-}: {
-  contact: Contact;
-  online: boolean;
-  lastSeen: string;
-  favorite: boolean;
-  onToggleFavorite: () => void;
-  menuOpen: boolean;
-  onMenu: (open: boolean) => void;
-  onMessage: () => void;
-  onCall: (type: "audio" | "video") => void;
-  onRemove: () => void;
-}) {
-  const target = contact.contactUser!;
-  const menuItem = "w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors hover:bg-surface-2";
-
-  return (
-    <li className="flex items-center gap-3 sm:gap-4 py-2.5">
-      <button
-        onClick={onToggleFavorite}
-        className={clsx("p-1.5 rounded-lg transition-colors", favorite ? "text-accent" : "text-muted hover:text-fg")}
-        title={favorite ? "Remove from favorites" : "Add to favorites"}
-        aria-pressed={favorite}
-      >
-        <Star className={clsx("h-5 w-5", favorite && "fill-current")} />
-      </button>
-
-      <Avatar src={target.avatarUrl} name={target.displayName} size="xl" className="[&>div]:!w-14 [&>div]:!h-14" />
-
-      <div className="min-w-0 flex-1 sm:flex-none sm:w-56">
-        <p className="flex items-center gap-2 text-[17px] font-semibold text-fg">
-          <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", online ? "bg-success" : "bg-faint/60")} />
-          <span className="truncate">{target.displayName}</span>
-        </p>
-        <p className="pl-[18px] text-[15px] text-muted truncate">@{target.username}</p>
-      </div>
-
-      <div className="hidden lg:block min-w-0 flex-1">
-        {target.bio && <p className="text-[15px] text-fg truncate">{target.bio}</p>}
-        <p className="text-sm text-muted truncate">{online ? "Online" : lastSeen}</p>
-      </div>
-
-      <button onClick={onMessage} className={clsx(softBtn, "hidden sm:inline-flex")}>
-        <MessageCircle className="h-4 w-4" /> Message
-      </button>
-
-      <div className="relative">
-        <button
-          onClick={() => onMenu(!menuOpen)}
-          className="p-2 rounded-xl text-fg hover:bg-surface-2 transition-colors"
-          title="More"
-        >
-          <MoreHorizontal className="h-5 w-5" />
-        </button>
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-20" onClick={() => onMenu(false)} />
-            <div className="absolute right-0 top-full mt-1 z-30 w-48 py-1.5 rounded-2xl bg-surface border border-border shadow-[var(--shadow-lg)] text-sm text-muted">
-              <button onClick={() => { onMenu(false); onMessage(); }} className={clsx(menuItem, "sm:hidden hover:text-fg")}>
-                <MessageCircle className="h-4 w-4" /> Message
-              </button>
-              <button onClick={() => { onMenu(false); onCall("audio"); }} className={clsx(menuItem, "hover:text-fg")}>
-                <Phone className="h-4 w-4" /> Voice call
-              </button>
-              <button onClick={() => { onMenu(false); onCall("video"); }} className={clsx(menuItem, "hover:text-fg")}>
-                <Video className="h-4 w-4" /> Video call
-              </button>
-              <div className="my-1 h-px bg-border" />
-              <button onClick={() => { onMenu(false); onRemove(); }} className={clsx(menuItem, "hover:text-danger")}>
-                <UserMinus className="h-4 w-4" /> Remove contact
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </li>
   );
 }
