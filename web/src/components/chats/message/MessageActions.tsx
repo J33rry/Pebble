@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { Edit2, Reply, Smile, Trash2 } from "lucide-react";
 import { messagesApi, type Message } from "@/lib/api/messages";
 import { useMessageActions } from "@/hooks/useMessageActions";
+import { ReactionPopover } from "./ReactionPopover";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -27,10 +28,16 @@ export function MessageActions({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showReactionsMenu, setShowReactionsMenu] = useState(false);
 
-  const handleReact = (emoji: string) => {
-    onReact(emoji);
+  const reactButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeReactions = useCallback(() => {
     setShowReactionsMenu(false);
     setShowEmojiPicker(false);
+  }, []);
+
+  const handleReact = (emoji: string) => {
+    onReact(emoji);
+    closeReactions();
   };
 
   const handleDelete = () => {
@@ -43,32 +50,27 @@ export function MessageActions({
   return (
     <div
       className={clsx(
-        "absolute top-2 hidden group-hover/row:flex items-center gap-1 glass-pill p-1.5 z-20 shadow-xl",
+        "absolute top-2 group-hover/row:flex items-center gap-1 glass-pill p-1.5 z-20 shadow-xl",
+        // Stay visible while the picker is open: it is positioned from the
+        // React button, and the pointer leaves the row to reach it.
+        showReactionsMenu || showEmojiPicker ? "flex" : "hidden",
         isMe ? "right-full translate-x-3" : "left-full -translate-x-3",
       )}
     >
       <div className="relative">
         <button
-          onClick={() => setShowReactionsMenu(!showReactionsMenu)}
+          ref={reactButtonRef}
+          onClick={() => (showReactionsMenu || showEmojiPicker ? closeReactions() : setShowReactionsMenu(true))}
           className="p-2 hover:text-accent text-muted rounded-full hover:bg-surface-3/50 transition-colors"
           title="React"
         >
           <Smile className="w-4 h-4" />
         </button>
 
-        {/* Reaction Popover */}
         {(showReactionsMenu || showEmojiPicker) && (
-          <div
-            className={clsx(
-              // Opens upward: the newest messages sit at the bottom of the
-              // scrolling list, which would clip a picker opening downward.
-              "absolute bottom-full mb-3 glass-panel rounded-3xl p-2.5 flex gap-1 z-50 animate-in fade-in zoom-in-95 duration-200",
-              // Extend over the bubble rather than toward the list's edge.
-              isMe ? "left-0" : "right-0",
-            )}
-          >
+          <ReactionPopover anchorRef={reactButtonRef} onClose={closeReactions}>
             {showEmojiPicker ? (
-              <div className="relative z-50" onClick={(e) => e.stopPropagation()}>
+              <div onClick={(e) => e.stopPropagation()}>
                 <EmojiPicker
                   theme={Theme.AUTO}
                   onEmojiClick={(e) => handleReact(e.emoji)}
@@ -95,7 +97,7 @@ export function MessageActions({
                 </button>
               </>
             )}
-          </div>
+          </ReactionPopover>
         )}
       </div>
 
