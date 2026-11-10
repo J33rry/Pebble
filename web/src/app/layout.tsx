@@ -35,8 +35,9 @@ const nesiota = localFont({
 const themeScript = `try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}`;
 
 export const metadata: Metadata = {
-  title: "One",
-  description: "A secure messaging application.",
+  title: "Pebble",
+  description: "Pebble — a secure messaging application.",
+  applicationName: "Pebble",
 };
 
 export default function RootLayout({

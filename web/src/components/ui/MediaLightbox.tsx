@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Download } from "lucide-react";
 
 export interface MediaLightboxProps {
@@ -24,12 +25,20 @@ export function MediaLightbox({ src, type = "image", onClose }: MediaLightboxPro
     };
   }, [src, onClose]);
 
-  if (!src) return null;
+  if (!src || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-lg animate-in fade-in duration-200">
+  // Portal to <body> so ancestor stacking contexts (transforms, overflow,
+  // z-index on the message list) can't let the chat header/composer paint over it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-lg animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       {/* Top action bar */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-3">
+      <div
+        className="absolute top-4 right-4 z-20 flex items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
         <a
           href={src}
           target="_blank"
@@ -69,6 +78,7 @@ export function MediaLightbox({ src, type = "image", onClose }: MediaLightboxPro
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
