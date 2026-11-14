@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { env } from "../config/env.js";
+import { passwordResetTemplate } from "./emailTemplates.js";
 
 const transport = env.SMTP_HOST
     ? nodemailer.createTransport({
@@ -25,10 +26,13 @@ export async function sendPasswordResetEmail(to, resetLink) {
         return;
     }
 
+    const { subject, html, text } = passwordResetTemplate({ resetLink });
+
     await transport.sendMail({
         from: env.EMAIL_FROM || env.SMTP_USER,
         to,
-        subject: "Reset your password",
-        text: `Use this link to set a new password. It expires in 15 minutes.\n\n${resetLink}\n\nIf you didn't ask for this, you can ignore this email.`,
+        subject,
+        text,
+        html,
     });
 }
